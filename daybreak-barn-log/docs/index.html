@@ -1,0 +1,1592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#304251">
+<title>Daybreak Barn Log</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Daybreak Barn Log. Layout idea: one thumb-reachable column of entry cards on a phone,
+   the same cards in a grid with a side rail on tablet and desktop; print shows the report only. */
+:root {
+  color-scheme: light;
+  --slate: #304251;      /* brand header and ink */
+  --orange: #ff8f00;     /* brand accent: actions */
+  --orange-ink: #a85a00; /* accent as text on white */
+  --teal: #007a9c;       /* brand secondary: links, chart series 1 */
+  --amber: #d97706;      /* chart series 2 */
+  --bg: #f3f1ec; --card: #ffffff; --line: #ded9cf; --ink: #22303b; --mute: #65717c;
+  --good: #1f7a44; --good-bg: #e2f3e8; --warn: #9a5b00; --warn-bg: #fff1d6; --bad: #b3261e; --bad-bg: #fde4e1;
+  --display: "Quicksand", "Trebuchet MS", "Segoe UI", sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --r: 12px;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.4 var(--body); -webkit-text-size-adjust: 100%; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; color: var(--slate); }
+h1 { font-size: 1.35rem; } h2 { font-size: 1.1rem; } h3 { font-size: .95rem; }
+a { color: var(--teal); }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+.num, td.n, th.n { font-variant-numeric: tabular-nums; }
+
+#top { background: var(--slate); color: #fff; display: flex; align-items: center; gap: 10px; padding: 8px 14px; position: sticky; top: 0; z-index: 20; }
+#top img { height: 34px; width: auto; display: block; }
+#top .ttl { font-family: var(--display); font-weight: 700; font-size: 1rem; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sync { border: 0; border-radius: 999px; padding: 5px 10px; font-size: .78rem; font-weight: 600; background: #ffffff22; color: #fff; white-space: nowrap; }
+#sync.pend { background: var(--orange); color: #2b1a00; } #sync.off { background: #ffffff22; } #sync.err { background: var(--bad); }
+#who { border: 2px solid var(--orange); background: transparent; color: #fff; border-radius: 999px; min-width: 44px; height: 36px; padding: 0 10px; font-weight: 700; }
+
+#nav { display: flex; background: var(--card); border-top: 1px solid var(--line); position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; padding-bottom: env(safe-area-inset-bottom, 0); }
+#nav a { flex: 1; text-align: center; padding: 9px 2px 8px; text-decoration: none; color: var(--mute); font-size: .74rem; font-weight: 600; border-top: 3px solid transparent; }
+#nav a b { display: block; font-family: var(--display); font-size: 1.05rem; line-height: 1.1; color: inherit; }
+#nav a.on { color: var(--slate); border-top-color: var(--orange); }
+main { padding: 14px 16px 92px; max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+@media (min-width: 900px) {
+  #nav { top: 50px; bottom: 0; right: auto; width: 96px; flex-direction: column; border-top: 0; border-right: 1px solid var(--line); justify-content: flex-start; }
+  #nav a { flex: 0 0 auto; padding: 14px 4px; border-top: 0; border-left: 4px solid transparent; }
+  #nav a.on { border-left-color: var(--orange); }
+  main { margin-left: 96px; padding: 20px 28px 40px; max-width: 1280px; }
+}
+
+.bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bar .grow { flex: 1; min-width: 0; }
+.btn { border: 1px solid var(--line); background: var(--card); color: var(--slate); border-radius: 10px; padding: 9px 14px; font-weight: 600; min-height: 44px; }
+.btn.pri { background: var(--orange); border-color: var(--orange); color: #2b1a00; }
+.btn.sm { min-height: 36px; padding: 5px 10px; font-size: .86rem; }
+.btn.ghost { background: transparent; }
+.btn[disabled] { opacity: .5; }
+.datebar { display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 6px; }
+.datebar .d { flex: 1; text-align: center; font-family: var(--display); font-weight: 700; color: var(--slate); }
+.datebar .d small { display: block; font: 600 .74rem var(--body); color: var(--mute); }
+.past { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: .9rem; }
+.note { color: var(--mute); font-size: .86rem; }
+.banner { border-radius: 10px; padding: 10px 12px; font-size: .9rem; background: var(--warn-bg); color: var(--warn); }
+.banner.bad { background: var(--bad-bg); color: var(--bad); }
+
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+@media (min-width: 800px) { .grid.wide { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card > .hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.card > .hd .sub { color: var(--mute); font-size: .84rem; margin-left: auto; }
+a.card { text-decoration: none; color: inherit; }
+a.card:hover { border-color: var(--teal); }
+.card.empty { background: transparent; border-style: dashed; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border-radius: 999px; padding: 3px 9px; font-size: .78rem; font-weight: 700; background: #eceae4; color: var(--mute); white-space: nowrap; }
+.chip.ok { background: var(--good-bg); color: var(--good); } .chip.part { background: var(--warn-bg); color: var(--warn); } .chip.bad { background: var(--bad-bg); color: var(--bad); }
+.stripe { border-left: 5px solid var(--line); } .stripe.ok { border-left-color: var(--good); } .stripe.part { border-left-color: var(--orange); } .stripe.bad { border-left-color: var(--bad); }
+
+.f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.f > label, .lbl { font-size: .78rem; font-weight: 700; color: var(--mute); text-transform: uppercase; letter-spacing: .03em; }
+.in { width: 100%; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; font-size: 1.05rem; background: #fff; color: var(--ink); min-height: 46px; }
+.in.num { font-variant-numeric: tabular-nums; }
+.in:focus { border-color: var(--teal); outline: none; box-shadow: 0 0 0 3px #007a9c33; }
+.in.bad { border-color: var(--bad); background: var(--bad-bg); }
+.in.big { font-size: 1.5rem; font-weight: 700; letter-spacing: .02em; }
+textarea.in { min-height: 46px; resize: vertical; }
+.row { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); align-items: end; }
+.row4 { display: grid; gap: 6px; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
+.seg { display: flex; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 10px 4px; min-height: 44px; font-weight: 600; font-size: .88rem; color: var(--mute); border-left: 1px solid var(--line); }
+.seg button:first-child { border-left: 0; }
+.seg button.on { background: var(--slate); color: #fff; }
+.seg button.on.g { background: var(--good); } .seg button.on.w { background: var(--orange); color: #2b1a00; } .seg button.on.b { background: var(--bad); }
+.tog { border: 1.5px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 12px; min-height: 44px; font-weight: 600; font-size: .9rem; color: var(--ink); text-align: left; display: flex; gap: 8px; align-items: center; }
+.tog i { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--line); flex: 0 0 auto; display: inline-block; }
+.tog.on { border-color: var(--good); background: var(--good-bg); } .tog.on i { background: var(--good); border-color: var(--good); }
+.calc { background: #eef6f8; border-radius: 10px; padding: 8px 10px; font-size: .9rem; color: var(--slate); display: flex; gap: 6px 14px; flex-wrap: wrap; }
+.calc b { font-variant-numeric: tabular-nums; }
+.msg { border-radius: 10px; padding: 8px 10px; font-size: .88rem; font-weight: 600; } .msg.warn { background: var(--warn-bg); color: var(--warn); } .msg.bad { background: var(--bad-bg); color: var(--bad); }
+.done { color: var(--good); font-weight: 700; font-size: .84rem; }
+details > summary { cursor: pointer; font-weight: 700; color: var(--slate); font-family: var(--display); }
+
+.tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
+.tile .v { font-family: var(--display); font-weight: 700; font-size: 1.6rem; color: var(--slate); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.tile .k { font-size: .78rem; font-weight: 700; color: var(--mute); text-transform: uppercase; letter-spacing: .03em; }
+.tile .s { font-size: .8rem; color: var(--mute); }
+.scope { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.scope button { flex: 0 0 auto; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 7px 13px; font-weight: 600; color: var(--slate); min-height: 38px; }
+.scope button.on { background: var(--slate); color: #fff; border-color: var(--slate); }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .tip { position: absolute; top: 0; pointer-events: none; background: var(--slate); color: #fff; border-radius: 8px; padding: 5px 8px; font-size: .78rem; white-space: nowrap; transform: translateX(-50%); display: none; z-index: 2; }
+.legend { display: flex; gap: 12px; font-size: .8rem; color: var(--mute); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+
+.tw { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; color: var(--mute); background: #faf8f4; }
+td.n, th.n { text-align: right; }
+tr.tot td { font-weight: 700; border-top: 2px solid var(--slate); }
+td.flag { color: var(--bad); font-weight: 700; }
+td.wrap { white-space: normal; min-width: 160px; }
+
+#modal { position: fixed; inset: 0; background: #1b2630aa; z-index: 50; display: none; align-items: flex-end; justify-content: center; }
+#modal.on { display: flex; }
+#modal .sheet { background: var(--card); border-radius: 16px 16px 0 0; padding: 18px 16px 24px; width: 100%; max-width: 520px; max-height: 88%; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 600px) { #modal { align-items: center; } #modal .sheet { border-radius: 16px; } }
+.who { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.who button { min-height: 56px; border-radius: 12px; border: 1.5px solid var(--line); background: #fff; font-family: var(--display); font-weight: 700; font-size: 1.15rem; color: var(--slate); }
+.who button.on { background: var(--slate); color: #fff; border-color: var(--slate); }
+.thumb { max-width: 120px; max-height: 90px; border-radius: 8px; border: 1px solid var(--line); }
+.rpt-head { display: flex; align-items: center; gap: 14px; border-bottom: 3px solid var(--orange); padding-bottom: 10px; }
+.rpt-head .logo { background: var(--slate); border-radius: 8px; padding: 6px 10px; } .rpt-head img { height: 34px; display: block; }
+.rpt h2 { margin-top: 14px; margin-bottom: 4px; }
+.rpt .sig { display: flex; gap: 30px; margin-top: 26px; font-size: .86rem; } .rpt .sig span { flex: 1; border-top: 1px solid var(--ink); padding-top: 4px; }
+@media (prefers-reduced-motion: no-preference) { .btn, .seg button, .tog { transition: background-color .12s, border-color .12s; } }
+@media print {
+  @page { size: letter landscape; margin: 10mm; }
+  body { background: #fff; font-size: 10pt; }
+  #top, #nav, .noprint { display: none !important; }
+  main { margin: 0; padding: 0; max-width: none; }
+  .card { border: 0; padding: 0; }
+  .tw { overflow: visible; }
+  table { font-size: 8.6pt; } th, td { padding: 3px 5px; }
+  .rpt-head .logo { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rpt h2 { break-after: avoid; } tr { break-inside: avoid; } .pb { break-before: page; }
+}
+
+</style>
+</head>
+<body>
+<header id="top">
+  <img id="logo" alt="Daybreak Farms" width="97" height="34">
+  <div class="ttl">Barn Log</div>
+  <button id="sync" type="button" class="off" title="Sync status">Starting...</button>
+  <button id="who" type="button" title="Who is entering">Who?</button>
+</header>
+<main id="main"><p class="note">Loading the barn log...</p></main>
+<nav id="nav" aria-label="Sections"></nav>
+<div id="modal"></div>
+<script>
+var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADZBTFBInAkAAAGgxv//ITf6zWq6SardoG4PSWrbtlK758tdbds4q7ZzW9s4X1I3qt3Gzvr74P//T7KTu3kcERNAKjZU7vnNtRfejIcnhoWbSLsbOu1IcEP4IqqlTqNJ5fZ6oNy1OUSnxXQDn6DgCR9rMP0QBwr1G5PW8lvmhfDJ6W2/XrULPHv9NdYaL/jXGhv1Or3h3S08eP8ppqXMy8G/0oXE1Tc7GWCXn4Ya7eCtK0FKTcMyOe6V2ql1DljHdCMp141KYYCROo1U5Q5Ye38jFVTqmsp58q5GWuFlPAslKrhuvJPBfqMmapMD9lwpKkzTXI7nEy1UMhZsvJkK13yGQVwlDfSxk8npR4Xd1MO4pmgf/b9gD1Lhz/cCQHpJzfOxl7lfxgeG3xhs1Gmc0nawo8iXQx3Mq2oa5xMPE1vBJ9ZYxj1Z25iOg50v+YT6M4jVNu/lMG8s5OMYBl00zTqws8jXn3mYv7VMINjX4T4Lfcpk1y0M2WKxqMFssVj0RcRgsVhMahjKOS77TP8r4xlXGH1iYmIkFXwQExMTWkRqxsTEdFDDuMcuAJHk+04M9kmF8BEANcwEULuINAHQXw1UZZ4bCFGB4T7zXKdhiOo8Oktq/JpBKw1Se8i4cQOqMFS7syq6O5l1WkPX6QG4l2tIpNbwJ0yyJJJM3RYtHmmSlOiDJi+eHaYnkywbJJMsyzyDLMsSRx88ZfHsMAMjybKsJ0ODJkYiydhq7uIp5fUiyTRg8eKuRskgyyYlkizLsq4gofvyIUyeX1ItJf9g8L7ANPMVALyeFylqcMQOAOebxAE7Av8BPOGcY0BaCabfPjsA76X+RFQXwIS+0d4TfmRZ9Qjs+Qie39JkAHgy9lvgiZ9IGuUCbr5bAOs/UOrZrVcJbeX0F/zlBteTJGidB35eNrBDWgJgGhPkAaKISfGC65zA2+EETviVj/GC7/iCMf/hAdeVrKzMWwANSLnZBuXOqVRh+C9Hj0aNq6v3zUecWRzDcgDuZ9G388BKRGEPAGRHR78Cu4NC7cDpYkQ0HnB9wgFSblxPA/CyIccJZiuA1HPHfvcAbxoRGb8G4HkUHesEFFW6BWQMoQJ+iYLalz9wAIA3aYrkk7qcDXqm0lMA8ypYA1s8FMz1ALENrdYKa90c2gLkViAynQfSqvJ2VbJaw84DOMsBHv8U2cMN/F05wFyqRz6wn6hsEoCp5a3BPV8oMu8FsEpfAMtfBVL8U4ASS7O+fVsGKjHamZNmZjiApcQ2zefdBt6WJyIy7ueFZgNfE4U/Ac5InCuBRES6awBCGcd3AaQ7BqQ0JnaRB6hAMwDnWGJ7uRQMGusETslUwLrpvsBESdT/nzQg406kUUQ3mBslmc3AIzOHtnD8PcAc4gbyzMeBbCtFuIB2xBlN3M9cwEDmgoEo6DGQuuEH9qQbGEEXgdt+HP15BftygaulqaAd4dO7Fp5uogdcxyy9aA/zxMr8C5yTeB9xmgPozKM4DkUC+Ix2ArHEq81rlQesZJYQUdmnUD6DEoBTJg59qwCAswsVsPHA733j6WioNbirmdpnQpg3SLSSyQxhzgB/CKZy6gIYJHjJC84FjgRmAPMFrXg97cBEZkJhTKKbwHmZt0HBHcCzUq+o9T34fOs5N5AxLAEK04MEXzKoyKwF7BaO/CeH7MB6HacNeLQQeLUESG8lmK9jpCVeoJ/IPx54FdFEHEyHgOQQjv8bBSMue2GPkBT0fwu15kOpvaegN6cJ09QO/FGFiIotBu8gkDfOQEQ1E0Wl3gBpwJ2SghdtmJYvgPQSIloL5E8gtkYdIqIIAMdDiMj/ayjoXzEGyO5KRFKji7jULw9F0jlC0JzTjSl1GcCLSZ0GXICgtx1wn+zWcWY6RNJGsAtIAPzQpPdGAN5ppKB4GoAN1UpUWpSHNSWILHcA3P+0Zb/TUEStnUBieaL2r1F0XR8JqnuYEQx1t0OxRFRiPxRzqLcdQH4FJcLfrUpoVDYA5AOAvQ+RNAyKFdCIbOB8abqEImzvKQjLYcZxpA6ZvJy1PNKfF0TFi4q9BBBFonUu3r13SJH0CcP92khEUg87L/e8Mt1qL3BAthXlHcUF779ISkpK+pBDUqOtt168SdjVqL3NZmOo+BdnHye9uDLF9L3NNp5DBwBHH06EzWYLH33uccaLK3NKElEVm83Wg0PU8Iffn2a+uLW1O3Gl5jvikt7eXVfrI5ttnUyhNputKRFZttlsu2rJRZqE1R1Op9PZn0dkKB0cYpVJL8sy8f0DQ4KL68gky0ZOeCoQV4mjl2VZIv+gssHFdUREkizLegEZSgSVDS5tIrHRGhJiMZBBlk1EOlmWdURERlmW9fSf2Axsd5HPDdVangGwSMfRlpGcKqqx3k0HcMmf/hflwZNYWS3bmLRg1QSlALjxLv1PnAFbVy3PmRsl1ZSx/D1JEDR4+PDhw0NFPYbXFpXoO3z44FBR5eENmYrDmwmMnScPtviOfuB8opLqYG2yasxDGgeQwpa5APC5oCxw2iAIewIAW/x5g5DgT1TsMLYIVrm83mf1fNefs9mgjtmc5ZJqCtoy9+ro0aPDBLPdnhc1FLwa++FR7zRJgK1E/fNEFXOjR87N+8F3gR4mMVAVflc4g6jIbCGF5oSn592DFcQFU20cMAo8rq7Gf72iZlhkojZ+vqMjjLunKuqlMPmBReePyMjIIF6bjDMtsV+RbiS26AXncHwtDovkWEfUmKqkwnYMnqtiFdjtVHQAoAFvGiZRTE4JEQC4u5Ng7E4guruIwq8DOUNVEHyXwRc631XLYjIqFKE/IiMjg3hX8cO0s5guyjz0GENJQYkEjGqqwKSrPuF5qtV30lrOzbI+8zsP9pBUhLaQuJob7COTIL58B8dBJTT2tL6JqFNMdaIoVPQdvZ/DYLXRV6NyGUd/+k/Y7pkXETEoOqulIC7YfNDdS0nJIFIwIjct6nj+LVLjfI79Mx+9lwr2fLH/BGvSk4pE0jzvbAXUEidkBURK9KNfA//WUYX5Lwav2vkk7BnY5Or0v1zJn9Qp9XYzeNbSByHXvIxrOmncdS4G2SNNhaRrmgHuVavWMe7xMsjaXqlQii95Ce6d8qR5y8RxgLdDLfoCSCVaPwI/sRpp4PcvezhA7I+9yykIaLf4Lwf4dxuQJi51zctj43+a1bFjx0W/XILSuxVIIxdfmKKgMHN3ViHNrGuS4It+BtLSftP/dhTOvUWBpLGl0r3OFkLcB8E60uLvTtn1e+KbbAB5yYkxx2bVI+2uL1W5ev0WLVo0rFk5WE/aE1ZQOCBEAwAAUBcAnQEqyABGAD6dRpxKpaOioad2bFCwE4lBtvC3xG/9m47DjEzs9Efbb+J0gPMA/VXpAeYDwQPcV6AH8+6gD0AP2A9Mv2If3Y9LrVUPNf8T/DumE+DfBH4Dx1ouXSxG6HSpnGo6Z92gkpyKWyaAjZJ5prDRUbOsb8/5IPopXZJwC4R9NZanvhizDI6LfVbgkoH13QnKyVC2fpfWbY8/lbQUbZwguLSR+0+vYZ9hh3BbnKxx2IBClCXtqOmRNR74d2ygAP77nT6mwP+60Zc+0rDyC/meFVOJjGPwfC47iBin+Fj9rnP5JwGPzT72/KE/j0FQEIuE5prl8fOvIaqZElTJjeVx147aLlnwD6ndJqHY+s05r05/1A967ygOEcPuvKOt/ZcdK/lEU1wFV6cRpQ1QMrDa/MujMmV5uQOT27zVMSgOBukTAoFY6V9Yk2X/4dPmts9rFWkY6OjsJDhV+IH8fPEYgKpiu93xKyHRiA6QLOFSRqvIP2/DNz7fU7/4Dmz//stf/z0P/+un+eRZFKymi1Mx+ix67Cr9NGpUPqsU3ZkQAEmUs41frhwJPeYsfMj+RQz69rpfa/WrW8m3v+zjs7W9u//62qdds+CGd6t3cyoBeK6/9q+usmZ8hiK7G/w7X5Ot3Rtn//9pRJP/h0gmP+HSE3/wpcLgNbJ9Wl7+k+6rHXOqepsP+G86r3rH5JXtw6iEP+ctgJxjWeIXLVTcvzKE7YBLYHESG4mTxOpAkkwbOWs+Ic8xHAUczxd7/Qmn9/7rUppwv1/wDxikRNiACsUqO/yX1B9SOqZJx67qFqU4ZT2wFdy2Jjesh5ivCdzoE5qog0reaDKHqS80bPi2r6fJNv9mSClQdbDjqiQNFfVi9J+iBoC/je9ZsEXuJRM+bwbrMgn2iV9308mnXtky39ciNQU0P6qCCtuHBlQIJlbvE9DrhJeeIqRP5lXFz6wv1ctdyhHd8g+zrzVkj3m4v9chv/cDDW33S8W4t054X/8eCNGf8Q6JD/OHLu1LBZ7Y7vXVuoAJ/nhwmPOkng95GMR3frT8dHRT/etwVVl5tRUuRTS5VWrS62gEKQ/MDMZmS8qDxrPW+vvPrQnIAAAAAAA=';
+
+</script>
+<script>
+/* Daybreak Barn Log - calculation engine. VERSION MARKER: ENGINE 1.1.0
+   Pure functions only: no DOM, no storage, no clock. Shared by the app and the tests.
+   Rule carried through every function: blank is never zero. A missing reading,
+   count or entry yields null, and null never enters a total or an average. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.DBE = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+  var ENGINE_VERSION = '1.1.0';
+
+  // ---------- dates (plain YYYY-MM-DD strings, no timezone maths)
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function ymd(y, m, d) { return y + '-' + pad(m) + '-' + pad(d); }
+  function parts(s) { return [parseInt(s.slice(0, 4), 10), parseInt(s.slice(5, 7), 10), parseInt(s.slice(8, 10), 10)]; }
+  function toDays(s) { var p = parts(s); return Math.round(Date.UTC(p[0], p[1] - 1, p[2]) / 86400000); }
+  function fromDays(n) { var d = new Date(n * 86400000); return ymd(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
+  function addDays(s, n) { return fromDays(toDays(s) + n); }
+  function daysInMonth(ym) { var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10); return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+  function monthDates(ym) { var out = [], n = daysInMonth(ym); for (var d = 1; d <= n; d++) out.push(ym + '-' + pad(d)); return out; }
+  function addMonths(ym, n) {
+    var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10) - 1 + n;
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + '-' + pad(m + 1);
+  }
+  function minutes(tm) {
+    if (typeof tm !== 'string') return null;
+    var m = /^(\d{1,2}):(\d{2})$/.exec(tm); if (!m) return null;
+    var h = +m[1], mi = +m[2]; if (h > 23 || mi > 59) return null; return h * 60 + mi;
+  }
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function n0(v) { return isNum(v) ? v : 0; }
+
+  // ---------- record access. db.get(kind, unit, date) -> data object or undefined
+  //            db.dates(kind, unit) -> sorted array of dates that have a record
+  function key(kind, unit, date) { return kind + '|' + unit + '|' + date; }
+
+  // ---------- mortality
+  var MORT_FIELDS = ['wa', 'wac', 'ba', 'bac', 'wp', 'wpc', 'bp', 'bpc'];
+  function deaths(d) {
+    if (!d) return { w: 0, b: 0, total: 0, am: 0, pm: 0, culls: 0, any: false };
+    var w = n0(d.wa) + n0(d.wac) + n0(d.wp) + n0(d.wpc);
+    var b = n0(d.ba) + n0(d.bac) + n0(d.bp) + n0(d.bpc);
+    var any = false;
+    for (var i = 0; i < MORT_FIELDS.length; i++) if (isNum(d[MORT_FIELDS[i]])) any = true;
+    return {
+      w: w, b: b, total: w + b,
+      am: n0(d.wa) + n0(d.wac) + n0(d.ba) + n0(d.bac),
+      pm: n0(d.wp) + n0(d.wpc) + n0(d.bp) + n0(d.bpc),
+      culls: n0(d.wac) + n0(d.bac) + n0(d.wpc) + n0(d.bpc), any: any
+    };
+  }
+
+  /* Bird count ledger for one line.
+     A cnt record on date D states the birds present at the START of day D
+     (a placement, a move, a depopulation or a recount). Every mortality entry
+     from that day on comes off it. Returns checkpoints of END-of-day counts. */
+  function ledger(db, line) {
+    var cd = db.dates('cnt', line), md = db.dates('mort', line);
+    var ev = [], i;
+    for (i = 0; i < cd.length; i++) ev.push([cd[i], 0]);
+    for (i = 0; i < md.length; i++) ev.push([md[i], 1]);
+    ev.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]; });
+    var pts = [], w = null, b = null;
+    for (i = 0; i < ev.length; i++) {
+      var date = ev[i][0];
+      if (ev[i][1] === 0) {
+        var c = db.get('cnt', line, date) || {};
+        w = n0(c.w); b = n0(c.b);
+      } else if (w !== null) {
+        var dd = deaths(db.get('mort', line, date));
+        w -= dd.w; b -= dd.b;
+      } else continue;
+      if (pts.length && pts[pts.length - 1][0] === date) pts[pts.length - 1] = [date, w, b];
+      else pts.push([date, w, b]);
+    }
+    return pts;
+  }
+  function ledgerAt(pts, date) {
+    var lo = 0, hi = pts.length - 1, ans = -1;
+    while (lo <= hi) { var mid = (lo + hi) >> 1; if (pts[mid][0] <= date) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+    if (ans < 0) return null;
+    return { w: pts[ans][1], b: pts[ans][2], total: pts[ans][1] + pts[ans][2] };
+  }
+  // END-of-day count for a line; null when no count has ever been recorded on or before the date.
+  function countAt(db, line, date) { return ledgerAt(db.ledger ? db.ledger(line) : ledger(db, line), date); }
+  // START-of-day count: a cnt record on the day wins, otherwise yesterday's end count.
+  function countStart(db, line, date) {
+    var c = db.get('cnt', line, date);
+    if (c) return { w: n0(c.w), b: n0(c.b), total: n0(c.w) + n0(c.b) };
+    return countAt(db, line, addDays(date, -1));
+  }
+  function birdsOf(db, lines, date) {
+    var tot = null;
+    for (var i = 0; i < lines.length; i++) {
+      var c = countAt(db, lines[i], date);
+      if (c) tot = (tot === null ? 0 : tot) + c.total;
+    }
+    return tot;
+  }
+
+  function mortMonth(db, line, ym) {
+    var ds = monthDates(ym), t = { w: 0, b: 0, total: 0, am: 0, pm: 0, culls: 0, days: 0 };
+    for (var i = 0; i < ds.length; i++) {
+      var dd = deaths(db.get('mort', line, ds[i]));
+      if (!dd.any) continue;
+      t.days++; t.w += dd.w; t.b += dd.b; t.total += dd.total; t.am += dd.am; t.pm += dd.pm; t.culls += dd.culls;
+    }
+    var st = countStart(db, line, ds[0]);
+    var en = countAt(db, line, ds[ds.length - 1]);
+    t.start = st ? st.total : null; t.startW = st ? st.w : null; t.startB = st ? st.b : null;
+    t.end = en ? en.total : null; t.endW = en ? en.w : null; t.endB = en ? en.b : null;
+    t.pct = (t.start !== null && t.start > 0) ? t.total / t.start : null;
+    return t;
+  }
+
+  // ---------- water
+  /* One reading per station per day. Consumption is the difference to the previous
+     reading that exists (not the previous calendar day), spread over the real hours
+     between the two when both carry a time. rs:1 marks a replaced meter. */
+  function waterDay(db, station, date, lines) {
+    var d = db.get('water', station, date);
+    if (!d || !isNum(d.r)) return null;
+    var all = db.dates('water', station), prev = null, pd = null;
+    for (var i = all.length - 1; i >= 0; i--) {
+      if (all[i] >= date) continue;
+      var p = db.get('water', station, all[i]);
+      if (p && isNum(p.r)) { prev = p; pd = all[i]; break; }
+    }
+    var out = { r: d.r, prev: prev ? prev.r : null, prevDate: pd, diff: null, hours: null, lph: null, perDay: null, birds: null, perBird: null, flag: null };
+    if (!prev || d.rs) { out.flag = d.rs ? 'reset' : 'first'; return out; }
+    out.diff = d.r - prev.r;
+    if (out.diff < 0) { out.flag = 'back'; out.diff = null; return out; }
+    var gap = toDays(date) - toDays(pd), m1 = minutes(prev.tm), m2 = minutes(d.tm);
+    out.hours = gap * 24 + ((m1 !== null && m2 !== null) ? (m2 - m1) / 60 : 0);
+    if (out.hours <= 0) out.hours = gap * 24;
+    out.lph = out.diff / out.hours; out.perDay = out.lph * 24;
+    if (gap > 1) out.flag = 'gap';
+    var birds = lines ? birdsOf(db, lines, date) : null;
+    out.birds = birds;
+    out.perBird = (birds !== null && birds > 0) ? out.perDay / birds : null;
+    return out;
+  }
+  function waterMonth(db, station, ym, lines) {
+    var ds = monthDates(ym), t = { total: 0, days: 0, hours: 0, pb: 0, pbDays: 0 };
+    for (var i = 0; i < ds.length; i++) {
+      var w = waterDay(db, station, ds[i], lines);
+      if (!w || w.diff === null) continue;
+      t.total += w.diff; t.days++; t.hours += w.hours;
+      if (w.perBird !== null) { t.pb += w.perBird; t.pbDays++; }
+    }
+    return {
+      total: t.days ? t.total : null, days: t.days,
+      avgHour: t.hours > 0 ? t.total / t.hours : null,
+      avgDay: t.hours > 0 ? t.total / t.hours * 24 : null,
+      perBird: t.pbDays ? t.pb / t.pbDays : null
+    };
+  }
+  // Entry guard: returns null when fine, otherwise {level:'block'|'warn', msg}
+  function waterGuard(prevReading, newReading, typical) {
+    if (!isNum(newReading)) return null;
+    if (isNum(prevReading)) {
+      if (newReading < prevReading) return { level: 'block', msg: 'Lower than the last reading (' + prevReading + '). A meter cannot run backwards.' };
+      var diff = newReading - prevReading;
+      if (isNum(typical) && typical > 0 && diff > typical * 3 && diff > 200) return { level: 'warn', msg: 'Usage of ' + diff + ' L is more than 3 times the recent daily average (' + Math.round(typical) + ' L). Check for a leak or a typing slip.' };
+    }
+    return null;
+  }
+
+  // ---------- feed (daily intake typed in tonnes)
+  function feedDay(db, line, date) {
+    var d = db.get('feed', line, date);
+    if (!d || !isNum(d.i)) return null;
+    var c = countAt(db, line, date);
+    return { i: d.i, birds: c ? c.total : null, gPerBird: (c && c.total > 0) ? d.i * 1e6 / c.total : null };
+  }
+  function feedMonth(db, line, ym) {
+    var ds = monthDates(ym), tot = 0, days = 0, del = 0, anyDel = false, g = 0, gd = 0;
+    for (var i = 0; i < ds.length; i++) {
+      var raw = db.get('feed', line, ds[i]);
+      if (raw && isNum(raw.del)) { del += raw.del; anyDel = true; }
+      var f = feedDay(db, line, ds[i]);
+      if (!f) continue;
+      tot += f.i; days++;
+      if (f.gPerBird !== null) { g += f.gPerBird; gd++; }
+    }
+    return { total: days ? tot : null, days: days, avgDay: days ? tot / days : null, gPerBird: gd ? g / gd : null, delivered: anyDel ? del : null };
+  }
+
+  // ---------- eggs
+  var EGG_FIELDS = ['w1', 'w2', 'b1', 'b2'];
+  function eggDay(db, group, date, lines) {
+    var d = db.get('egg', group, date);
+    if (!d) return null;
+    var any = false, w = 0, b = 0;
+    if (isNum(d.w1)) { w += d.w1; any = true; } if (isNum(d.w2)) { w += d.w2; any = true; }
+    if (isNum(d.b1)) { b += d.b1; any = true; } if (isNum(d.b2)) { b += d.b2; any = true; }
+    if (!any) return null;
+    var birds = isNum(d.birds) ? d.birds : (lines ? birdsOf(db, lines, date) : null);
+    return { white: w, brown: b, total: w + b, birds: birds, prod: (birds !== null && birds > 0) ? (w + b) / birds : null };
+  }
+  function eggMonth(db, group, ym, lines) {
+    var ds = monthDates(ym), t = { white: 0, brown: 0, total: 0, days: 0, prod: 0, prodDays: 0 };
+    for (var i = 0; i < ds.length; i++) {
+      var e = eggDay(db, group, ds[i], lines);
+      if (!e) continue;
+      t.white += e.white; t.brown += e.brown; t.total += e.total; t.days++;
+      if (e.prod !== null) { t.prod += e.prod; t.prodDays++; }
+    }
+    return {
+      white: t.days ? t.white : null, brown: t.days ? t.brown : null, total: t.days ? t.total : null, days: t.days,
+      avgDay: t.days ? t.total / t.days : null, avgProd: t.prodDays ? t.prod / t.prodDays : null,
+      dozWhite: t.days ? t.white / 12 : null, dozBrown: t.days ? t.brown / 12 : null
+    };
+  }
+  /* Eggs for any set of lines on one day. Collection is recorded per row (egg|<line>|date).
+     Days before per-row collection began fall back to the old team records, but only for a
+     scope that contains every line of that team - a team total is never split between rows. */
+  function eggScope(db, lines, date, groups) {
+    var w = 0, b = 0, birds = 0, known = true, n = 0, exp = 0, i;
+    for (i = 0; i < lines.length; i++) {
+      var c = countAt(db, lines[i], date);
+      if (!c || c.total > 0) exp++;
+      var e = eggDay(db, lines[i], date, [lines[i]]);
+      if (!e) continue;
+      n++; w += e.white; b += e.brown;
+      if (e.birds === null) known = false; else birds += e.birds;
+    }
+    if (n) return { white: w, brown: b, total: w + b, birds: known ? birds : null, prod: (known && birds > 0) ? (w + b) / birds : null, rows: n, expected: exp, source: 'rows' };
+    var g = groups || [], hit = 0;
+    for (i = 0; i < g.length; i++) {
+      var inside = true;
+      for (var j = 0; j < g[i].lines.length; j++) if (lines.indexOf(g[i].lines[j]) < 0) inside = false;
+      if (!inside) continue;
+      var ge = eggDay(db, g[i].id, date, g[i].lines);
+      if (!ge) continue;
+      hit++; w += ge.white; b += ge.brown;
+      if (ge.birds === null) known = false; else birds += ge.birds;
+    }
+    if (!hit) return null;
+    return { white: w, brown: b, total: w + b, birds: known ? birds : null, prod: (known && birds > 0) ? (w + b) / birds : null, rows: 0, expected: exp, source: 'teams' };
+  }
+  function eggScopeMonth(db, lines, ym, groups) {
+    var ds = monthDates(ym), t = { white: 0, brown: 0, total: 0, days: 0, prod: 0, prodDays: 0 };
+    for (var i = 0; i < ds.length; i++) {
+      var e = eggScope(db, lines, ds[i], groups);
+      if (!e) continue;
+      t.white += e.white; t.brown += e.brown; t.total += e.total; t.days++;
+      if (e.prod !== null) { t.prod += e.prod; t.prodDays++; }
+    }
+    return { white: t.days ? t.white : null, brown: t.days ? t.brown : null, total: t.days ? t.total : null, days: t.days,
+      avgDay: t.days ? t.total / t.days : null, avgProd: t.prodDays ? t.prod / t.prodDays : null,
+      dozWhite: t.days ? t.white / 12 : null, dozBrown: t.days ? t.brown / 12 : null };
+  }
+  /* Breed standard at an age. std = { from: first age week in the table, v: [hen-day % per week] }.
+     Outside the table the answer is null: never the nearest week, never a guess. */
+  function stdAt(std, weeks) {
+    if (!std || !isNum(weeks)) return null;
+    var i = Math.floor(weeks) - std.from;
+    return (i >= 0 && i < std.v.length && isNum(std.v[i])) ? std.v[i] : null;
+  }
+  function feedPerDozen(feedTonnes, eggs) {
+    if (!isNum(feedTonnes) || !isNum(eggs) || eggs <= 0) return null;
+    return feedTonnes * 1000 / (eggs / 12);
+  }
+
+  // ---------- daily checklist
+  function chkSlot(d, s) {
+    if (!d) return null;
+    var has = d[s + '_w'] || d[s + '_f'] || d[s + '_h'] || isNum(d[s + '_t']) || d[s + '_by'];
+    if (!has) return null;
+    var issues = [];
+    if (d[s + '_w'] === 'leak') issues.push('Water leak');
+    if (d[s + '_f'] && d[s + '_f'] !== 'ok') issues.push(d[s + '_f'] === 'leak' ? 'Feed leak' : 'Feeders poor');
+    if (d[s + '_h'] && d[s + '_h'] !== 'ok') issues.push('Hen health poor');
+    if (n0(d[s + '_wb']) > 0) issues.push('Wild birds: ' + d[s + '_wb']);
+    if (n0(d[s + '_fl']) >= 2) issues.push(d[s + '_fl'] === 3 ? 'Flies high' : 'Flies moderate');
+    var complete = !!(d[s + '_w'] && d[s + '_f'] && d[s + '_h'] && isNum(d[s + '_t']) && d[s + '_by']);
+    return { complete: complete, issues: issues, temp: isNum(d[s + '_t']) ? d[s + '_t'] : null };
+  }
+  /* The two annual-audit items on the daily checklist: a minimum AND a maximum temperature for the
+     day, and a fly check inside the barn at both the AM and the PM round. */
+  function chkAudit(d) {
+    if (!d) return { minMax: false, flies: 0, ok: false };
+    var mm = isNum(d.a_tn) && isNum(d.p_tx), fl = (isNum(d.a_fl) ? 1 : 0) + (isNum(d.p_fl) ? 1 : 0);
+    return { minMax: mm, flies: fl, ok: mm && fl === 2 };
+  }
+  function chkMonth(db, station, ym) {
+    var ds = monthDates(ym), t = { am: 0, pm: 0, issues: 0, tSum: 0, tN: 0, tMin: null, tMax: null, wild: 0, leakDays: 0, minMaxDays: 0, flyChecks: 0, auditDays: 0 };
+    for (var i = 0; i < ds.length; i++) {
+      var d = db.get('chk', station, ds[i]); if (!d) continue;
+      var a = chkSlot(d, 'a'), p = chkSlot(d, 'p'), leak = false;
+      if (a) { t.am++; t.issues += a.issues.length; }
+      if (p) { t.pm++; t.issues += p.issues.length; }
+      if (d.a_w === 'leak' || d.p_w === 'leak') leak = true;
+      if (leak) t.leakDays++;
+      var au = chkAudit(d);
+      if (au.minMax) t.minMaxDays++;
+      t.flyChecks += au.flies;
+      if (au.ok) t.auditDays++;
+      t.wild += n0(d.a_wb) + n0(d.p_wb);
+      var vals = [d.a_t, d.p_t, d.a_tn, d.p_tx];
+      for (var j = 0; j < vals.length; j++) if (isNum(vals[j])) {
+        if (j < 2) { t.tSum += vals[j]; t.tN++; }
+        if (t.tMin === null || vals[j] < t.tMin) t.tMin = vals[j];
+        if (t.tMax === null || vals[j] > t.tMax) t.tMax = vals[j];
+      }
+    }
+    t.tAvg = t.tN ? t.tSum / t.tN : null;
+    return t;
+  }
+
+  // ---------- flock age
+  function ageWeeks(hatch, date) {
+    if (!hatch || !date) return null;
+    var n = toDays(date) - toDays(hatch);
+    return n >= 0 ? n / 7 : null;
+  }
+
+  // ---------- sync merge: field-level last-write-wins. rec = {k, d:{}, t:{field:ms}, by}
+  function merge(local, inc) {
+    if (!local) return { k: inc.k, d: copy(inc.d), t: copy(inc.t || {}), by: inc.by || '' };
+    var out = { k: local.k, d: copy(local.d), t: copy(local.t || {}), by: local.by || '' }, changed = false, newest = 0, f;
+    for (f in out.t) if (out.t[f] > newest) newest = out.t[f];
+    for (f in (inc.t || {})) {
+      var ti = inc.t[f], tl = out.t[f] || 0;
+      if (ti > tl) {
+        if (Object.prototype.hasOwnProperty.call(inc.d || {}, f) && inc.d[f] !== null) out.d[f] = inc.d[f]; else delete out.d[f];
+        out.t[f] = ti; changed = true;
+        if (ti >= newest) { newest = ti; out.by = inc.by || out.by; }
+      }
+    }
+    out.changed = changed;
+    return out;
+  }
+  function copy(o) { var r = {}; for (var k in o) r[k] = o[k]; return r; }
+
+
+  // ---------- in-memory index over records {k: {k, d, t, by}}. Used by the app and the tests.
+  function makeDb() {
+    var recs = {}, idx = {}, sorted = {}, led = {};
+    function ik(kind, unit) { return kind + '|' + unit; }
+    function split(k) { var a = k.indexOf('|'), b = k.indexOf('|', a + 1); return b < 0 ? [k.slice(0, a), k.slice(a + 1), ''] : [k.slice(0, a), k.slice(a + 1, b), k.slice(b + 1)]; }
+    var db = {
+      recs: recs,
+      put: function (rec) {
+        var p = split(rec.k), i = ik(p[0], p[1]);
+        var empty = true; for (var f in rec.d) { empty = false; break; }
+        if (!idx[i]) idx[i] = {};
+        if (empty) { delete idx[i][p[2]]; } else idx[i][p[2]] = rec;
+        recs[rec.k] = rec; delete sorted[i];
+        if (p[0] === 'cnt' || p[0] === 'mort') delete led[p[1]];
+      },
+      rec: function (k) { return recs[k]; },
+      get: function (kind, unit, date) { var m = idx[ik(kind, unit)]; var r = m && m[date]; return r ? r.d : undefined; },
+      dates: function (kind, unit) {
+        var i = ik(kind, unit);
+        if (!sorted[i]) sorted[i] = Object.keys(idx[i] || {}).sort();
+        return sorted[i];
+      },
+      ledger: function (line) { if (!led[line]) led[line] = ledger(db, line); return led[line]; },
+      units: function (kind) { var out = []; for (var i in idx) if (i.indexOf(kind + '|') === 0) out.push(i.slice(kind.length + 1)); return out; }
+    };
+    return db;
+  }
+
+  return {
+    makeDb: makeDb, ENGINE_VERSION: ENGINE_VERSION,
+    pad: pad, ymd: ymd, addDays: addDays, addMonths: addMonths, daysInMonth: daysInMonth, monthDates: monthDates, toDays: toDays, minutes: minutes,
+    isNum: isNum, key: key, MORT_FIELDS: MORT_FIELDS, EGG_FIELDS: EGG_FIELDS,
+    deaths: deaths, ledger: ledger, countAt: countAt, countStart: countStart, birdsOf: birdsOf, mortMonth: mortMonth,
+    waterDay: waterDay, waterMonth: waterMonth, waterGuard: waterGuard,
+    feedDay: feedDay, feedMonth: feedMonth, eggDay: eggDay, eggMonth: eggMonth, eggScope: eggScope, eggScopeMonth: eggScopeMonth, stdAt: stdAt, chkAudit: chkAudit, feedPerDozen: feedPerDozen,
+    chkSlot: chkSlot, chkMonth: chkMonth, ageWeeks: ageWeeks, merge: merge
+  };
+});
+
+</script>
+<script>
+/* Breed standards: hen-day production % by age week. VERSION MARKER: STD 1.0.0
+   Copied figure for figure from surecrop-scripts layer/BreedStandardsData.js (LBS_V1_2026_08_08),
+   which was generated from the Lohmann Breeders manuals (cage 2021/2022, alternative systems 06/21).
+   A week the manual does not publish is absent: the lookup returns null, never the nearest week.
+   No Dekalb table is loaded - none of the source manuals is a Dekalb manual. */
+var STANDARDS = {
+  'lsl-caged': { name: 'Lohmann LSL-Lite, cage', from: 19, v: [10.2,37.7,55.7,72.8,83.1,89.1,92.3,94.1,95.1,95.7,96.1,96.2,96.4,96.5,96.6,96.7,96.7,96.7,96.6,96.5,96.4,96.3,96.2,96.1,96,95.8,95.6,95.4,95.2,95,94.8,94.6,94.4,94.1,93.9,93.6,93.3,93.1,92.8,92.5,92.2,91.9,91.6,91.3,91,90.6,90.3,89.9,89.4,89,88.6,88.1,87.7,87.2,86.7,86.3,85.8,85.2,84.7,84.2,83.6,83.1,82.6,82,81.4,80.8,80.2,79.5,78.8,78.1,77.5,76.8,76.3,75.5,74.8,74.1,73.3,72.6,71.8,70.9,70.1,69.3] },
+  'lsl-free': { name: 'Lohmann LSL-Lite, free run', from: 19, v: [9.9,37.4,55.4,72.5,82.8,88.8,92,93.8,94.9,95.5,95.8,96,96.1,96.2,96.3,96.4,96.5,96.4,96.3,96.3,96.2,96.1,96,95.9,95.7,95.6,95.4,95.2,95,94.8,94.6,94.3,94.1,93.8,93.6,93.3,93.1,92.8,92.5,92.2,91.9,91.5,91.2,90.9,90.6,90.3,89.9,89.6,89.2,88.8,88.4,87.9,87.5,87,86.5,86.1,85.6,85,84.5,84,83.4,82.9,82.3,81.7,81.1,80.5,79.9,79.2,78.5,77.8,77.1,76.4,75.7,74.9,74.2,73.5,72.7,72,71.2,70.3,69.5,68.7] },
+  'brown-caged': { name: 'Lohmann Brown-Lite, cage', from: 19, v: [10.1,37.5,55.5,73,83.4,89.1,92.3,94.1,95.1,95.7,96.1,96.2,96.4,96.5,96.6,96.6,96.5,96.4,96.2,96,95.9,95.7,95.5,95.3,95.1,94.9,94.6,94.3,94,93.7,93.4,93.1,92.8,92.4,92.1,91.7,91.4,91,90.6,90.3,89.9,89.5,89.2,88.8,88.4,88,87.6,87.3,86.9,86.5,86.1,85.7,85.1,84.6,84.1,83.7,83.2,82.6,82.1,81.6,81,80.5,79.9,79.3,78.7,78.1,77.6,77,76.3,75.7,75.1,74.6,73.8,73.2,72.5,71.9,71.2,70.6,69.9,69.2,68.5,67.8] },
+  'brown-free': { name: 'Lohmann Brown-Lite, free run', from: 19, v: [9.3,36.7,54.7,72.2,82.6,88.2,91.4,93.2,94.3,94.9,95.2,95.4,95.6,95.7,95.8,95.8,95.7,95.6,95.4,95.2,95.1,94.9,94.7,94.5,94.3,94.1,93.8,93.6,93.3,93,92.7,92.3,92,91.7,91.3,91,90.6,90.2,89.9,89.5,89.1,88.8,88.4,88,87.6,87.2,86.8,86.5,86.1,85.6,85.2,84.7,84.3,83.7,83.2,82.7,82.2,81.7,81.1,80.6,80,79.5,78.9,78.3,77.8,77.2,76.6,76,75.3,74.7,74.1,73.5] }
+};
+
+/* Daybreak Barn Log - app core. VERSION MARKER: APP 1.1.0 */
+'use strict';
+var APP_VERSION = '1.1.0';
+var E = window.DBE, db = E.makeDb();
+
+/* ---------- farm configuration (from the Flock Planner tab, 2026-11-20).
+   Lines, stations and egg groups are data, not code: edit here or in Setup. */
+var CFG = {
+  farm: 'Daybreak Farms',
+  barns: [
+    { id: 'B1', name: 'Barn 1', lines: ['A', 'B', 'C'] },
+    { id: 'B2', name: 'Barn 2', lines: ['21', '22', '23', '24', '25', '26'] },
+    { id: 'B3', name: 'Barn 3 Free Run', lines: ['31', '32'] }
+  ],
+  /* Only the physical layout lives in the page, because the page is served from a public address.
+     Flock details (breed, CPP number, placement dates), the quota and the staff initials are farm
+     records: they arrive through sync or a restore file and are edited in the app. */
+  lines: {
+    'A': { name: 'Line A', alias: 'Row A', barn: 'B1', cap: 5712 }, 'B': { name: 'Line B', alias: 'Row B', barn: 'B1', cap: 5712 }, 'C': { name: 'Line C', alias: 'Row C', barn: 'B1', cap: 5712 },
+    '21': { name: 'Line 21', alias: 'Row 21', barn: 'B2', cap: 7776 }, '22': { name: 'Line 22', alias: 'Row 22', barn: 'B2', cap: 7776 }, '23': { name: 'Line 23', alias: 'Row 23', barn: 'B2', cap: 7776 },
+    '24': { name: 'Line 24', alias: 'Row 24', barn: 'B2', cap: 7776 }, '25': { name: 'Line 25', alias: 'Row 25', barn: 'B2', cap: 7776 }, '26': { name: 'Line 26', alias: 'Row 26', barn: 'B2', cap: 7776 },
+    '31': { name: 'Line 31', alias: 'Row I / 31', barn: 'B3', cap: 1700 }, '32': { name: 'Line 32', alias: 'Row J / 32', barn: 'B3', cap: 1700 }
+  },
+  /* A station is one walk-through: one water meter, one checklist, one activity log. */
+  stations: [
+    { id: '1ABC', name: 'Barn 1', sub: 'Lines A, B, C', barn: 'B1', lines: ['A', 'B', 'C'] },
+    { id: '21', name: 'Line 21', sub: 'Barn 2', barn: 'B2', lines: ['21'] },
+    { id: '22', name: 'Line 22', sub: 'Barn 2', barn: 'B2', lines: ['22'] },
+    { id: '23', name: 'Line 23', sub: 'Barn 2', barn: 'B2', lines: ['23'] },
+    { id: '24', name: 'Line 24', sub: 'Barn 2', barn: 'B2', lines: ['24'] },
+    { id: '25', name: 'Line 25', sub: 'Barn 2', barn: 'B2', lines: ['25'] },
+    { id: '26', name: 'Line 26', sub: 'Barn 2', barn: 'B2', lines: ['26'] },
+    { id: '31', name: 'Line 31', sub: 'Barn 3 Free Run', barn: 'B3', lines: ['31'] },
+    { id: '32', name: 'Line 32', sub: 'Barn 3 Free Run', barn: 'B3', lines: ['32'] }
+  ],
+  /* Eggs are collected and recorded per row (every line, A to 32). The teams below are kept only so
+     the months recorded by team in the old sheet still show in dashboards and reports. */
+  groups: [
+    { id: 'TA', name: 'Team A (old sheet)', lines: ['A', 'B', 'C', '21', '22', '23', '24', '25', '26'] },
+    { id: 'FR', name: 'Free Run (old sheet)', lines: ['31', '32'] }
+  ],
+  seasons: {
+    winter: { name: 'Winter', months: [11, 12, 1, 2], tasks: [['w1', 'Clean escalator and trays'], ['w2', 'Clean and lubricate chain'], ['w3', 'Fill feeder corners with vegetable oil'], ['w4', 'Clean and scrape under rod conveyor and hallway'], ['w5', 'Check manure (flies)'], ['w6', 'Change footbath (warm water and iodine)'], ['w7', 'Sweep floor inside barn']] },
+    summer: { name: 'Summer', months: [3, 4, 5, 6, 7, 8, 9, 10], tasks: [['s1', 'Clean manure curtains'], ['s2', 'Scrape beams'], ['s3', 'Blow down and sweep barns'], ['s4', 'Inspect fly lights and clean hallway'], ['s5', 'Check manure (flies)'], ['s6', 'Check ventilation fans']] }
+  }
+};
+var FLY = ['Absent', 'Low', 'Moderate', 'High'];
+var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+var DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/* ---------- small helpers */
+function $(id) { return document.getElementById(id); }
+function h(tag, a, kids) {
+  var e = document.createElement(tag), k, v;
+  if (a) for (k in a) {
+    v = a[k]; if (v === null || v === undefined || v === false) continue;
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v;
+    else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  if (kids !== undefined) add(e, kids);
+  return e;
+}
+function add(e, k) {
+  if (Array.isArray(k)) k.forEach(function (x) { add(e, x); });
+  else if (k !== null && k !== undefined && k !== false) e.appendChild(typeof k === 'object' ? k : document.createTextNode(String(k)));
+}
+function clear(e) { while (e.firstChild) e.removeChild(e.firstChild); return e; }
+function fmt(v, dp) {
+  if (!E.isNum(v)) return '-';
+  return v.toLocaleString('en-CA', { minimumFractionDigits: dp || 0, maximumFractionDigits: dp || 0 });
+}
+function pct(v, dp) { return E.isNum(v) ? (v * 100).toFixed(dp === undefined ? 1 : dp) + '%' : '-'; }
+function today() { var d = new Date(); return E.ymd(d.getFullYear(), d.getMonth() + 1, d.getDate()); }
+function nowTime() { var d = new Date(); return E.pad(d.getHours()) + ':' + E.pad(d.getMinutes()); }
+function niceDate(s) { var d = new Date(E.toDays(s) * 86400000); return DOW[d.getUTCDay()] + ' ' + MONTHS[d.getUTCMonth()].slice(0, 3) + ' ' + d.getUTCDate(); }
+function niceMonth(ym) { return MONTHS[parseInt(ym.slice(5, 7), 10) - 1] + ' ' + ym.slice(0, 4); }
+function station(id) { for (var i = 0; i < CFG.stations.length; i++) if (CFG.stations[i].id === id) return CFG.stations[i]; return null; }
+function group(id) { for (var i = 0; i < CFG.groups.length; i++) if (CFG.groups[i].id === id) return CFG.groups[i]; return null; }
+function lineInfo(id) {
+  var base = CFG.lines[id] || { name: 'Line ' + id }, o = db.get('flock', id, '') || {}, out = {}, k;
+  for (k in base) out[k] = base[k];
+  for (k in o) out[k] = o[k] === 'none' ? '' : o[k];
+  if (!out.hatch && out.placed && E.isNum(Number(out.ageAt)) && String(out.ageAt) !== '') out.hatch = E.addDays(out.placed, -Math.round(Number(out.ageAt) * 7));
+  return out;
+}
+function allLines() { var o = []; CFG.barns.forEach(function (b) { o = o.concat(b.lines); }); return o; }
+/* Which breed standard a line is measured against. A choice made in Flock details wins. Otherwise the
+   colour of the birds in the line and the housing decide, and a line marked Dekalb gets none
+   (no Dekalb table is loaded). */
+function lineStd(L, date) {
+  var li = lineInfo(L);
+  if (li.std === 'off') return null;
+  if (li.std && STANDARDS[li.std]) return STANDARDS[li.std];
+  if (/dekalb/i.test(li.breed || '')) return null;
+  var c = E.countAt(db, L, date);
+  if (!c || !c.total) return null;
+  return STANDARDS[(c.b > c.w ? 'brown' : 'lsl') + '-' + (li.barn === 'B3' ? 'free' : 'caged')];
+}
+function seasonFor(date) {
+  var m = parseInt(date.slice(5, 7), 10);
+  return CFG.seasons.winter.months.indexOf(m) >= 0 ? CFG.seasons.winter : CFG.seasons.summer;
+}
+function staffList() { var c = db.get('cfg', 'staff', ''); return c && c.list ? String(c.list).split(',') : []; }
+function quota() { var q = db.get('cfg', 'quota', '') || {}; return (E.isNum(q.base) || E.isNum(q.tapB) || E.isNum(q.sleeve)) ? { base: q.base || 0, tapB: q.tapB || 0, sleeve: q.sleeve || 0, total: (q.base || 0) + (q.tapB || 0) + (q.sleeve || 0) } : null; }
+
+/* ---------- device storage: IndexedDB for records and the outbox, localStorage for small settings.
+   Every write lands on the device first; the network is never in the way of an entry. */
+var IDB = null, MEM = {}, STORE_OK = false;
+function ls(k, v) {
+  try {
+    if (v === undefined) return window.localStorage.getItem('dbk.' + k);
+    if (v === null) window.localStorage.removeItem('dbk.' + k); else window.localStorage.setItem('dbk.' + k, v);
+  } catch (e) { if (v === undefined) return MEM[k] === undefined ? null : MEM[k]; MEM[k] = v; }
+  return v;
+}
+function idbOpen(cb) {
+  var done = false;
+  function fin() { if (!done) { done = true; cb(); } }
+  try {
+    var rq = window.indexedDB.open('daybreak-barnlog', 1);
+    rq.onupgradeneeded = function () {
+      var d = rq.result;
+      d.createObjectStore('recs', { keyPath: 'k' }); d.createObjectStore('outbox', { keyPath: 'k' });
+    };
+    rq.onsuccess = function () { IDB = rq.result; STORE_OK = true; fin(); };
+    rq.onerror = fin;
+    setTimeout(function () { if (!done) { var m = $('main'); if (m) m.firstChild.textContent = 'Still opening the storage on this device. Entry stays locked until it is ready, so nothing can be overwritten...'; } }, 4000);
+  } catch (e) { fin(); }
+}
+function idbAll(store, cb) {
+  if (!IDB) return cb([]);
+  try {
+    var rq = IDB.transaction(store).objectStore(store).getAll();
+    rq.onsuccess = function () { cb(rq.result || []); }; rq.onerror = function () { cb([]); };
+  } catch (e) { cb([]); }
+}
+function storeFail() { STORE_OK = false; paintSync(); if (!$('nostore') && $('main')) $('main').insertBefore(h('div', { id: 'nostore', class: 'banner bad', text: 'This device just refused to store an entry (storage full or blocked). Do not close this page. Write the last entries on paper and tell the office.' }), $('main').firstChild); }
+function idbPut(store, val) { if (!IDB) return; try { var tx = IDB.transaction(store, 'readwrite'); tx.objectStore(store).put(val); tx.onabort = storeFail; } catch (e) { storeFail(); } }
+/* Save one record and its outbox entry in ONE transaction, merged field by field with what is already
+   stored, so a second tab or window on the same device can never overwrite this tab's entries. */
+var BC = null;
+try { BC = new BroadcastChannel('daybreak-barnlog'); } catch (e) { BC = null; }
+function persist(k, fields) {
+  if (!IDB) return;
+  try {
+    var tx = IDB.transaction(['recs', 'outbox'], 'readwrite'), rs = tx.objectStore('recs'), os = tx.objectStore('outbox');
+    var g = rs.get(k);
+    g.onsuccess = function () {
+      var mem = db.rec(k), out = mem;
+      if (g.result) { out = E.merge(g.result, mem); delete out.changed; db.put(out); }
+      rs.put(out);
+    };
+    if (fields && fields.length) {
+      var go = os.get(k);
+      go.onsuccess = function () {
+        var o = go.result || { k: k, f: [] };
+        fields.forEach(function (f) { if (o.f.indexOf(f) < 0) o.f.push(f); });
+        os.put(o); OUTBOX[k] = o;
+      };
+    }
+    tx.oncomplete = function () { if (BC) { try { BC.postMessage(k); } catch (e) { } } };
+    tx.onabort = storeFail;
+  } catch (e) { storeFail(); }
+}
+if (BC) BC.onmessage = function (ev) {
+  var k = ev.data; if (!IDB || typeof k !== 'string') return;
+  try {
+    var tx = IDB.transaction(['recs', 'outbox']), g = tx.objectStore('recs').get(k), go = tx.objectStore('outbox').get(k);
+    g.onsuccess = function () { if (g.result) { var m = E.merge(db.rec(k), g.result); delete m.changed; db.put(m); } };
+    go.onsuccess = function () { if (go.result) OUTBOX[k] = go.result; else delete OUTBOX[k]; };
+    tx.oncomplete = function () { paintSync(); softRefresh(); };
+  } catch (e) { }
+};
+function idbDel(store, k) { if (!IDB) return; try { IDB.transaction(store, 'readwrite').objectStore(store).delete(k); } catch (e) { } }
+function idbBulk(store, vals, cb) {
+  if (!IDB) return cb && cb();
+  try {
+    var tx = IDB.transaction(store, 'readwrite'), os = tx.objectStore(store);
+    vals.forEach(function (v) { os.put(v); });
+    tx.oncomplete = function () { if (cb) cb(); }; tx.onerror = function () { if (cb) cb(); };
+  } catch (e) { if (cb) cb(); }
+}
+
+/* ---------- state and the single write path */
+var READY = false;
+var S = { follow: true, date: today(), user: ls('user') || '', dashScope: 'farm', dashDays: 30, rptMonth: today().slice(0, 7), rptScope: 'farm' };
+var OUTBOX = {}, LIVE = [];
+function val(k, f) { var r = db.rec(k); return r ? r.d[f] : undefined; }
+function setF(k, f, v) {
+  var r = db.rec(k) || { k: k, d: {}, t: {} };
+  if (v === '' || v === null || v === undefined) { if (!(f in r.d)) return; delete r.d[f]; } else { if (r.d[f] === v) return; r.d[f] = v; }
+  r.t[f] = Date.now(); r.by = S.user;
+  db.put(r);
+  var o = OUTBOX[k] || { k: k, f: [] };
+  if (o.f.indexOf(f) < 0) o.f.push(f);
+  OUTBOX[k] = o; persist(k, [f]);
+  paintSync(); scheduleSync();
+  for (var i = 0; i < LIVE.length; i++) LIVE[i]();
+}
+function setMany(k, obj) { for (var f in obj) setF(k, f, obj[f]); }
+
+/* ---------- sync: push the outbox, pull everyone else's changes. Safe to run any time, any number of times. */
+var SYNC = { busy: false, err: '', last: ls('lastSync') || '', timer: null };
+function syncUrl() { return ls('url') || ''; }
+function scheduleSync() { if (!syncUrl()) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(syncNow, 2500); }
+function syncNow(cb) {
+  var url = syncUrl();
+  if (!url || SYNC.busy || !READY) { if (cb) cb(false); return; }
+  if (navigator.onLine === false) { SYNC.err = 'offline'; paintSync(); if (cb) cb(false); return; }
+  var keys = Object.keys(OUTBOX).filter(function (k) { return !!db.rec(k); }).sort(function (a, b) { return (OUTBOX[a].fail || 0) - (OUTBOX[b].fail || 0); }).slice(0, 400);
+  var sent = {}, ops = keys.map(function (k) {
+    var r = db.rec(k), o = { k: k, f: {}, t: {}, by: r.by || S.user };
+    sent[k] = OUTBOX[k].f.slice();
+    sent[k].forEach(function (f) { o.f[f] = (f in r.d) ? r.d[f] : null; o.t[f] = r.t[f] || Date.now(); });
+    return o;
+  });
+  SYNC.busy = true; paintSync();
+  var body = JSON.stringify({ pass: ls('pass') || '', device: deviceId(), since: parseInt(ls('cursor') || '0', 10), ops: ops, v: APP_VERSION });
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: body, redirect: 'follow' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j || !j.ok) throw new Error((j && j.error) || 'Server refused the sync');
+      var failed = j.failed || [];
+      keys.forEach(function (k) {
+        var o = OUTBOX[k]; if (!o) return;
+        if (failed.indexOf(k) >= 0) { o.fail = (o.fail || 0) + 1; idbPut('outbox', o); return; }
+        var r = db.rec(k) || { t: {} };
+        o.f = o.f.filter(function (f) { return sent[k].indexOf(f) < 0 || (r.t[f] || 0) > (ops[keys.indexOf(k)].t[f] || 0); });
+        if (o.f.length) idbPut('outbox', o); else { delete OUTBOX[k]; idbDel('outbox', k); }
+      });
+      var changed = 0;
+      (j.changes || []).forEach(function (inc) {
+        var m = E.merge(db.rec(inc.k), inc);
+        if (m.changed !== false) { delete m.changed; db.put(m); persist(inc.k, null); changed++; }
+      });
+      if (E.isNum(j.seq)) ls('cursor', String(j.seq));
+      SYNC.err = failed.length ? failed.length + ' entries were refused by the server' : ''; SYNC.more = !!j.more;
+      SYNC.last = new Date().toISOString(); ls('lastSync', SYNC.last); SYNC.busy = false; paintSync();
+      if (changed) softRefresh();
+      if (j.more) { syncNow(cb); return; }
+      if (Object.keys(OUTBOX).length > failed.length) scheduleSync();
+      if (cb) cb(true);
+    })
+    .catch(function (e) { SYNC.busy = false; SYNC.err = String(e && e.message || e); paintSync(); if (cb) cb(false); });
+}
+function deviceId() { var d = ls('device'); if (!d) { d = 'd' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); ls('device', d); } return d; }
+function paintSync() {
+  var el = $('sync'); if (!el) return;
+  var n = Object.keys(OUTBOX).length, cls = '', txt;
+  if (!syncUrl()) { txt = STORE_OK ? 'On device' : 'NOT SAVING'; cls = STORE_OK ? 'off' : 'err'; }
+  else if (SYNC.busy) { txt = SYNC.more ? 'Loading history...' : 'Syncing...'; cls = 'pend'; }
+  else if (n) { txt = n + ' to sync'; cls = 'pend'; }
+  else if (SYNC.err && SYNC.err !== 'offline') { txt = 'Sync problem'; cls = 'err'; }
+  else txt = 'All synced';
+  el.textContent = txt; el.className = cls;
+}
+
+/* ---------- modal and the "who is entering" picker */
+function modal(kids) { var m = $('modal'); clear(m); if (!kids) { m.className = ''; return; } m.className = 'on'; m.appendChild(h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' }, kids)); }
+function pickUser(then) {
+  var box = h('div', { class: 'who' }, staffList().map(function (s) {
+    return h('button', { type: 'button', class: s === S.user ? 'on' : '', text: s, onclick: function () { S.user = s; ls('user', s); modal(null); $('who').textContent = s; if (then) then(); } });
+  }));
+  var own = h('input', { id: 'who_own', class: 'in', maxlength: '4', placeholder: 'Initials', autocomplete: 'off' });
+  function useOwn() { var v = own.value.trim().toUpperCase().replace(/[^A-Z]/g, ''); if (!v) return; S.user = v; ls('user', v); modal(null); $('who').textContent = v; if (then) then(); }
+  modal([h('h2', { text: 'Who is entering?' }), h('p', { class: 'note', text: 'Your initials are stamped on everything you record on this device until you change them.' }), box,
+    h('div', { class: 'bar' }, [h('div', { class: 'grow' }, field(staffList().length ? 'Not listed? Type your initials' : 'Type your initials (the staff list arrives with the first sync)', own)), h('button', { type: 'button', class: 'btn', text: 'Use these', onclick: useOwn })]),
+    h('button', { type: 'button', class: 'btn ghost', text: 'Cancel', onclick: function () { modal(null); } })]);
+}
+/* Every entry path calls this first. It also catches a page left open past midnight:
+   the page moves to the new day instead of quietly writing into yesterday. */
+function rollDay() {
+  if (!S.follow || S.date === today()) return false;
+  S.date = today(); route();
+  return true;
+}
+/* Supervisor PIN: sign-off, bird count changes, flock details and the staff list ask for it.
+   It is a lock on the screen, not on the data - anyone with the farm passcode and technical skill
+   could still write to the record, and every change is in the audit log with who and when. */
+var PIN_OK_UNTIL = 0;
+function pinHash(p) { var x = 2166136261, s = 'daybreak:' + p; for (var i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = (x * 16777619) >>> 0; } return x.toString(16); }
+function pinSet() { var c = db.get('cfg', 'pin', ''); return !!(c && c.h); }
+function withPin(then) {
+  if (!needUser()) return;
+  if (!pinSet() || Date.now() < PIN_OK_UNTIL) { then(); return; }
+  var inp = h('input', { id: 'pin_in', class: 'in big', type: 'password', inputmode: 'numeric', autocomplete: 'off' }), msg = h('div');
+  function go() { if (pinHash(inp.value.trim()) === db.get('cfg', 'pin', '').h) { PIN_OK_UNTIL = Date.now() + 600000; modal(null); then(); } else { msg.className = 'msg bad'; msg.textContent = 'That is not the supervisor PIN.'; inp.value = ''; } }
+  inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+  modal([h('h2', { text: 'Supervisor PIN' }), h('p', { class: 'note', text: 'Sign-off and bird count changes need the supervisor PIN. It stays unlocked on this device for 10 minutes.' }), field('PIN', inp), msg,
+    h('div', { class: 'bar' }, [h('button', { type: 'button', class: 'btn pri', text: 'Unlock', onclick: go }), h('button', { type: 'button', class: 'btn ghost', text: 'Cancel', onclick: function () { modal(null); } })])]);
+  inp.focus();
+}
+function needUser() {
+  if (rollDay()) { modal([h('h2', { text: 'A new day has started' }), h('p', { text: 'This page was still showing yesterday. It now shows ' + niceDate(S.date) + '. Nothing was written - please enter that again.' }), h('button', { type: 'button', class: 'btn pri', text: 'OK', onclick: function () { modal(null); } })]); return false; }
+  if (S.user) return true; pickUser(); return false;
+}
+/* A background change (sync pull, another tab) refreshes numbers in place. It only redraws the whole
+   screen when nobody is typing and the screen holds no half-filled form. */
+function softRefresh() {
+  var name = (location.hash || '#today').slice(1), a = document.activeElement;
+  var typing = a && a.matches && a.matches('input,textarea,select');
+  if (typing || ['maint', 'flocks', 'sizing', 'setup'].indexOf(name) >= 0) { for (var i = 0; i < LIVE.length; i++) LIVE[i](); return; }
+  route();
+}
+
+/* ---------- bound inputs. All of them write through setF, so every keystroke is on the device. */
+var UID = 0;
+function fid(k, f) { return ('i_' + k + '_' + f).replace(/[^A-Za-z0-9_]/g, '_'); }
+function field(label, input, extra) { return h('div', { class: 'f' }, [h('label', { 'for': input.id || null, text: label }), input, input._note || null, extra]); }
+function numIn(k, f, o) {
+  o = o || {};
+  var v = val(k, f), note = h('div', { class: 'msg bad', hidden: true });
+  var el = h('input', { id: fid(k, f), class: 'in num' + (o.big ? ' big' : ''), type: 'text', inputmode: o.neg ? 'text' : (o.dec ? 'decimal' : 'numeric'), autocomplete: 'off', placeholder: o.ph || '', value: E.isNum(v) ? String(v) : '' });
+  function refuse(why) { el.classList.add('bad'); note.hidden = false; note.textContent = why + ' Not saved yet.'; }
+  function commit() {
+    if (!needUser()) { el.value = E.isNum(val(k, f)) ? String(val(k, f)) : ''; return; }
+    var s = el.value.trim().replace(/\s/g, '');
+    if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, ''); else s = s.replace(',', '.');
+    var n = s === '' ? null : Number(s);
+    if (s === '-' || s === '.') return;
+    if (n !== null && !isFinite(n)) return refuse('That is not a number.');
+    if (n !== null && n < 0 && !o.neg) return refuse('This cannot be negative.');
+    if (n !== null && !o.dec && n !== Math.floor(n)) return refuse('Whole numbers only here.');
+    if (n !== null && o.max !== undefined && n > o.max) return refuse('That is higher than this field allows (' + o.max + ').');
+    el.classList.remove('bad'); note.hidden = true;
+    setF(k, f, n);
+    if (o.after) o.after(n);
+  }
+  el.addEventListener('input', commit);
+  LIVE.push(function () { if (document.activeElement !== el && !el.classList.contains('bad')) { var x = val(k, f); el.value = E.isNum(x) ? String(x) : ''; } });
+  el._note = note;
+  return el;
+}
+function textIn(k, f, o) {
+  o = o || {};
+  var el = h(o.area ? 'textarea' : 'input', { id: fid(k, f), class: 'in', type: o.type || 'text', rows: o.area ? 2 : null, placeholder: o.ph || '', autocomplete: 'off' });
+  el.value = val(k, f) || '';
+  function commit() { if (!needUser()) { el.value = val(k, f) || ''; return; } setF(k, f, el.value.trim()); if (o.after) o.after(); }
+  el.addEventListener('input', commit); el.addEventListener('change', commit);
+  LIVE.push(function () { if (document.activeElement !== el) el.value = val(k, f) || ''; });
+  return el;
+}
+function seg(k, f, opts, after) {
+  var box = h('div', { class: 'seg', role: 'group' });
+  function paint() { var cur = val(k, f); Array.prototype.forEach.call(box.children, function (b, i) { b.className = (cur === opts[i][0]) ? 'on ' + (opts[i][2] || '') : ''; b.setAttribute('aria-pressed', cur === opts[i][0] ? 'true' : 'false'); }); }
+  opts.forEach(function (o) {
+    box.appendChild(h('button', { type: 'button', text: o[1], onclick: function () { if (!needUser()) return; setF(k, f, val(k, f) === o[0] ? null : o[0]); if (after) after(); paint(); } }));
+  });
+  paint(); LIVE.push(paint);
+  return box;
+}
+function tog(k, f, label, after) {
+  var b = h('button', { type: 'button', class: 'tog' }, [h('i'), label]);
+  function paint() { var on = !!val(k, f); b.className = 'tog' + (on ? ' on' : ''); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  b.addEventListener('click', function () { if (!needUser()) return; setF(k, f, val(k, f) ? null : 1); if (after) after(); paint(); });
+  paint(); LIVE.push(paint);
+  return b;
+}
+function stamp(k, byF, tmF) { if (val(k, byF) !== S.user) setF(k, byF, S.user); if (tmF && !val(k, tmF)) setF(k, tmF, nowTime()); }
+function live(fn) { LIVE.push(fn); fn(); }
+
+/* ---------- status of one station on one day (drives the Today board and the dashboards) */
+function stStatus(st, date) {
+  var chk = db.get('chk', st.id, date), a = E.chkSlot(chk, 'a'), p = E.chkSlot(chk, 'p');
+  var w = db.get('water', st.id, date), birds = E.birdsOf(db, st.lines, date);
+  var need = 0, got = 0, issues = [];
+  st.lines.forEach(function (L) {
+    var c = E.countAt(db, L, date);
+    if (c && c.total === 0) return;
+    need++; if (E.deaths(db.get('mort', L, date)).any) got++;
+  });
+  if (a) issues = issues.concat(a.issues); if (p) issues = issues.concat(p.issues);
+  var wd = E.waterDay(db, st.id, date, st.lines);
+  if (wd && wd.flag === 'back') issues.push('Water meter reading is lower than the last one');
+  var act = db.get('act', st.id, date), tasks = seasonFor(date).tasks, td = 0;
+  tasks.forEach(function (t) { if (act && act[t[0]]) td++; });
+  return {
+    empty: birds === 0, birds: birds,
+    am: a ? (a.complete ? 'ok' : 'part') : '', pm: p ? (p.complete ? 'ok' : 'part') : '',
+    water: (w && E.isNum(w.r)) ? 'ok' : '', mort: need === 0 ? 'ok' : (got === need ? 'ok' : (got ? 'part' : '')),
+    audit: (function () { var au = E.chkAudit(chk); return au.ok ? 'ok' : (au.minMax || au.flies ? 'part' : ''); })(),
+    tasks: td, issues: issues
+  };
+}
+function chip(label, state) { return h('span', { class: 'chip ' + (state || ''), text: label }); }
+
+function dateBar(onchange) {
+  var isToday = S.date === today();
+  return h('div', { class: 'datebar noprint' }, [
+    h('button', { type: 'button', class: 'btn sm', 'aria-label': 'Previous day', text: '<', onclick: function () { S.date = E.addDays(S.date, -1); S.follow = false; onchange(); } }),
+    h('div', { class: 'd' }, [niceDate(S.date), h('small', { text: isToday ? 'Today' : S.date })]),
+    h('button', { type: 'button', class: 'btn sm', 'aria-label': 'Next day', text: '>', disabled: S.date >= today(), onclick: function () { S.date = E.addDays(S.date, 1); S.follow = S.date === today(); onchange(); } }),
+    !isToday && h('button', { type: 'button', class: 'btn sm pri', text: 'Today', onclick: function () { S.date = today(); S.follow = true; onchange(); } })
+  ]);
+}
+
+/* ---------- TODAY: the board every shift starts from */
+function viewToday(main) {
+  add(main, [h('div', { class: 'bar' }, [h('h1', { class: 'grow', text: 'Barn rounds' })]), dateBar(route)]);
+  if (S.date !== today()) add(main, h('div', { class: 'past', text: 'You are looking at ' + niceDate(S.date) + '. Entries you make here are saved to that day.' }));
+  var total = 0, done = 0, grid = h('div', { class: 'grid' });
+  CFG.stations.forEach(function (st) {
+    var s = stStatus(st, S.date);
+    var states = [s.am, s.pm, s.water, s.mort], n = states.filter(function (x) { return x === 'ok'; }).length;
+    if (!s.empty) { total += 4; done += n; }
+    var cls = s.empty ? 'empty' : ('stripe ' + (s.issues.length ? 'bad' : n === 4 ? 'ok' : n ? 'part' : ''));
+    grid.appendChild(h('a', { class: 'card ' + cls, href: '#st-' + st.id }, [
+      h('div', { class: 'hd' }, [h('h2', { text: st.name }), h('span', { class: 'sub', text: s.empty ? 'Empty' : (s.birds === null ? st.sub : fmt(s.birds) + ' birds') })]),
+      h('div', { class: 'chips' }, [chip('AM check', s.am), chip('PM check', s.pm), chip('Water', s.water), chip('Mortality', s.mort), chip('Min/max + flies', s.audit), chip('Tasks ' + s.tasks, s.tasks ? 'ok' : '')]),
+      s.issues.length ? h('div', { class: 'msg bad', text: s.issues.join(' . ') }) : null
+    ]));
+  });
+  var all = allLines(), es = E.eggScope(db, all, S.date, []);
+  var need2 = 0; all.forEach(function (L) { var c = E.countAt(db, L, S.date); if (!c || c.total > 0) need2++; });
+  var rows = es && es.source === 'rows' ? es.rows : 0;
+  var eg = h('a', { class: 'card stripe ' + (rows >= need2 && need2 ? 'ok' : rows ? 'part' : ''), href: '#eggs' }, [
+    h('div', { class: 'hd' }, [h('h2', { text: 'Egg collection by row' }), h('span', { class: 'sub', text: rows ? fmt(es.total) + ' eggs' : 'Not entered' })]),
+    h('div', { class: 'chips' }, [chip(rows + ' of ' + need2 + ' rows entered', rows >= need2 && need2 ? 'ok' : rows ? 'part' : ''), rows ? chip('Production ' + pct(es.prod), 'ok') : null])
+  ]);
+  add(main, [h('div', { class: 'note', text: total ? (done + ' of ' + total + ' daily entries done across occupied stations.') : '' }), grid, h('h2', { text: 'Egg collection' }), h('div', { class: 'grid' }, eg)]);
+}
+
+/* ---------- STATION: everything for one walk-through on one screen */
+function chkCard(st, slot) {
+  var k = E.key('chk', st.id, S.date), p = slot + '_', isAm = slot === 'a';
+  function st1() { stamp(k, p + 'by', p + 'tm'); }
+  var state = h('span', { class: 'sub' });
+  live(function () { var s = E.chkSlot(db.get('chk', st.id, S.date), slot); state.textContent = s ? (s.complete ? 'Complete - ' + (val(k, p + 'by') || '') + ' ' + (val(k, p + 'tm') || '') : 'Started - add the temperature') : 'Not started'; state.className = 'sub' + (s && s.complete ? ' done' : ''); });
+  return h('div', { class: 'card' }, [
+    h('div', { class: 'hd' }, [h('h2', { text: isAm ? 'AM check' : 'PM check' }), state]),
+    h('button', { type: 'button', class: 'btn pri', text: 'All good - no leaks, feeders and hens good, no flies', onclick: function () {
+      if (!needUser()) return;
+      var o = {}; o[p + 'w'] = 'ok'; o[p + 'f'] = 'ok'; o[p + 'h'] = 'ok'; o[p + 'wb'] = 0; o[p + 'fl'] = 0; setMany(k, o); st1();
+      var t = $(fid(k, p + 't')); if (t) t.focus();
+    } }),
+    h('div', { class: 'f' }, [h('span', { class: 'lbl', text: 'Water supply' }), seg(k, p + 'w', [['ok', 'No leaks', 'g'], ['leak', 'Leaks', 'b']], st1)]),
+    h('div', { class: 'f' }, [h('span', { class: 'lbl', text: 'Feeders' }), seg(k, p + 'f', [['ok', 'Good', 'g'], ['leak', 'Feed leak', 'b'], ['poor', 'Poor', 'b']], st1)]),
+    h('div', { class: 'f' }, [h('span', { class: 'lbl', text: 'Health of hens' }), seg(k, p + 'h', [['ok', 'Good', 'g'], ['poor', 'Poor', 'b']], st1)]),
+    h('div', { class: 'f' }, [h('span', { class: 'lbl', text: 'Flies inside the barn (audit item)' }), seg(k, p + 'fl', [[0, 'Absent', 'g'], [1, 'Low', 'g'], [2, 'Moderate', 'w'], [3, 'High', 'b']], st1)]),
+    h('div', { class: 'row' }, [
+      field('Temp ' + (isAm ? 'AM' : 'PM') + ' (C)', numIn(k, p + 't', { dec: true, neg: true, max: 60, after: st1 })),
+      field(isAm ? 'Daily MIN temp (C) - audit' : 'Daily MAX temp (C) - audit', numIn(k, isAm ? 'a_tn' : 'p_tx', { dec: true, neg: true, max: 60 })),
+      field('Wild birds', numIn(k, p + 'wb', { max: 999 })),
+      field('Time checked', textIn(k, p + 'tm', { type: 'time' }))
+    ]),
+    field('Comments', textIn(k, p + 'c', { area: true, after: st1 }))
+  ]);
+}
+function waterCard(st) {
+  var k = E.key('water', st.id, S.date), calc = h('div', { class: 'calc' }), msg = h('div');
+  live(function () {
+    var w = E.waterDay(db, st.id, S.date, st.lines), raw = db.get('water', st.id, S.date);
+    clear(calc); clear(msg); msg.className = '';
+    var ds = db.dates('water', st.id), prev = null, pd = '';
+    for (var i = ds.length - 1; i >= 0; i--) if (ds[i] < S.date) { var q = db.get('water', st.id, ds[i]); if (q && E.isNum(q.r)) { prev = q.r; pd = ds[i]; break; } }
+    add(calc, ['Last reading ', h('b', { text: prev === null ? 'none' : fmt(prev) }), prev === null ? '' : ' on ' + niceDate(pd)]);
+    if (w && w.diff !== null) add(calc, [' | Used ', h('b', { text: fmt(w.diff) + ' L' }), ' over ' + fmt(w.hours, 1) + ' h | ', h('b', { text: fmt(w.lph, 1) + ' L/h' }), w.perBird !== null ? [' | ', h('b', { text: fmt(w.perBird * 1000) + ' mL/bird/day' })] : '']);
+    if (w && w.flag === 'back') { msg.className = 'msg bad'; msg.textContent = 'This reading is lower than the last one (' + fmt(w.prev) + '). Correct it, or tick "Meter was replaced".'; }
+    else if (w && w.flag === 'gap') { msg.className = 'msg warn'; msg.textContent = 'No reading on the day before, so this usage covers more than one day.'; }
+    else if (raw && E.isNum(raw.r) && prev !== null) {
+      var m = E.waterMonth(db, st.id, E.addDays(S.date, -1).slice(0, 7), null), g = E.waterGuard(prev, raw.r, m.avgDay);
+      if (g) { msg.className = 'msg warn'; msg.textContent = g.msg; }
+    }
+  });
+  return h('div', { class: 'card' }, [
+    h('div', { class: 'hd' }, [h('h2', { text: 'Water meter' })]),
+    h('div', { class: 'row' }, [
+      field('Meter reading', numIn(k, 'r', { big: true, dec: true, after: function (n) { if (n !== null) stamp(k, 'by', 'tm'); } })),
+      field('Time read', textIn(k, 'tm', { type: 'time' }))
+    ]),
+    calc, msg,
+    field('Comments / additives', textIn(k, 'c', { area: true })),
+    tog(k, 'rs', 'Meter was replaced or reset today')
+  ]);
+}
+function mortCard(st) {
+  var kids = [h('div', { class: 'hd' }, [h('h2', { text: 'Mortality and culls' })])];
+  st.lines.forEach(function (L) {
+    var k = E.key('mort', L, S.date), c0 = E.countStart(db, L, S.date), info = lineInfo(L);
+    var head = h('div', { class: 'bar' }, [h('h3', { class: 'grow', text: info.name })]), cnt = h('span', { class: 'note' });
+    head.appendChild(cnt);
+    live(function () { var c = E.countAt(db, L, S.date); cnt.textContent = c ? fmt(c.total) + ' birds' + (c.w && c.b ? ' (' + fmt(c.w) + ' white, ' + fmt(c.b) + ' brown)' : '') : 'No bird count yet'; });
+    kids.push(head);
+    if (c0 && c0.total === 0 && !db.get('mort', L, S.date)) { kids.push(h('div', { class: 'note' }, ['Empty. ', h('a', { href: '#flocks', text: 'Record a placement or move' })])); return; }
+    var cols = [];
+    if (!c0 || c0.w > 0 || val(k, 'wa') !== undefined || val(k, 'wp') !== undefined) cols.push(['w', 'White']);
+    if (!c0 || c0.b > 0 || val(k, 'ba') !== undefined || val(k, 'bp') !== undefined) cols.push(['b', 'Brown']);
+    cols.forEach(function (cc) {
+      var x = cc[0];
+      function am() { stamp(k, 'aby'); } function pm() { stamp(k, 'pby'); }
+      kids.push(h('div', { class: 'lbl', text: cc[1] + ' birds' }));
+      kids.push(h('div', { class: 'row4' }, [
+        field('AM dead', numIn(k, x + 'a', { after: am })), field('AM culls', numIn(k, x + 'ac', { after: am })),
+        field('PM dead', numIn(k, x + 'p', { after: pm })), field('PM culls', numIn(k, x + 'pc', { after: pm }))
+      ]));
+    });
+    kids.push(h('div', { class: 'bar' }, [
+      h('button', { type: 'button', class: 'btn sm', text: 'AM: none found', onclick: function () { if (!needUser()) return; cols.forEach(function (cc) { if (val(k, cc[0] + 'a') === undefined) setF(k, cc[0] + 'a', 0); if (val(k, cc[0] + 'ac') === undefined) setF(k, cc[0] + 'ac', 0); }); stamp(k, 'aby'); route(); } }),
+      h('button', { type: 'button', class: 'btn sm', text: 'PM: none found', onclick: function () { if (!needUser()) return; cols.forEach(function (cc) { if (val(k, cc[0] + 'p') === undefined) setF(k, cc[0] + 'p', 0); if (val(k, cc[0] + 'pc') === undefined) setF(k, cc[0] + 'pc', 0); }); stamp(k, 'pby'); route(); } })
+    ]));
+  });
+  return h('div', { class: 'card' }, kids);
+}
+function actCard(st) {
+  var k = E.key('act', st.id, S.date), se = seasonFor(S.date);
+  function st1() { stamp(k, 'by', 'tm'); }
+  return h('div', { class: 'card' }, [
+    h('div', { class: 'hd' }, [h('h2', { text: 'Activity log' }), h('span', { class: 'sub', text: se.name + ' tasks - tick what was done today' })]),
+    se.tasks.map(function (t) { return tog(k, t[0], t[1], st1); }),
+    h('div', { class: 'row' }, [field('Ammonia (ppm)', numIn(k, 'nh3', { dec: true, max: 200, after: st1 })), field('Time completed', textIn(k, 'tm', { type: 'time' }))])
+  ]);
+}
+function feedCard(st) {
+  var any = st.lines.some(function (L) { return !!db.get('feed', L, S.date); });
+  var kids = [h('summary', { text: 'Feed' }), h('div', { class: 'note', text: 'Daily intake arrives from BinSentry each morning for the day before. Type a figure only to correct it - a typed figure is never overwritten.' })];
+  st.lines.forEach(function (L) {
+    var k = E.key('feed', L, S.date), out = h('span', { class: 'note' });
+    live(function () { var f = E.feedDay(db, L, S.date); out.textContent = (f && f.gPerBird !== null ? fmt(f.gPerBird, 1) + ' g per bird' : '') + (val(k, 'src') === 'binsentry' ? ' - from BinSentry' : ''); });
+    kids.push(h('div', { class: 'bar' }, [h('h3', { class: 'grow', text: lineInfo(L).name }), out]));
+    kids.push(h('div', { class: 'row' }, [field('Daily intake (t)', numIn(k, 'i', { dec: true, max: 50, after: function () { if (val(k, 'src') !== 'manual') setF(k, 'src', 'manual'); } })), field('Feed delivered (t)', numIn(k, 'del', { dec: true, max: 100 })), field('Bin reading', numIn(k, 'bin', { dec: true })), field('Ration', textIn(k, 'ra'))]));
+  });
+  var d = h('details', { class: 'card' }, kids); if (any) d.setAttribute('open', '');
+  return d;
+}
+function viewStation(main, id) {
+  var st = station(id); if (!st) { location.hash = '#today'; return; }
+  var birds = E.birdsOf(db, st.lines, S.date);
+  add(main, [
+    h('div', { class: 'bar' }, [h('a', { class: 'btn sm noprint', href: '#today', text: '< Rounds' }), h('h1', { class: 'grow', text: st.name }), h('a', { class: 'btn sm noprint', href: '#dash', text: 'Dashboard', onclick: function () { S.dashScope = st.id; } })]),
+    h('div', { class: 'note', text: st.sub + (birds === null ? '' : ' - ' + fmt(birds) + ' birds') }),
+    dateBar(route),
+    S.date !== today() ? h('div', { class: 'past', text: 'Back-filling ' + niceDate(S.date) + '. Check the date before you type.' }) : null,
+    h('div', { class: 'grid' }, [waterCard(st), chkCard(st, 'a'), chkCard(st, 'p'), mortCard(st), actCard(st), feedCard(st)])
+  ]);
+  var idx = CFG.stations.indexOf(st), nx = CFG.stations[idx + 1];
+  add(main, h('div', { class: 'bar noprint' }, [h('span', { class: 'grow note', text: 'Everything is saved as you type.' }), nx ? h('a', { class: 'btn pri', href: '#st-' + nx.id, text: 'Next: ' + nx.name + ' >' }) : h('a', { class: 'btn pri', href: '#today', text: 'Back to rounds' })]));
+}
+
+/* ---------- EGGS: one entry per row, every row on the farm */
+function viewEggs(main) {
+  add(main, [h('h1', { text: 'Egg collection by row' }), dateBar(route)]);
+  if (S.date !== today()) add(main, h('div', { class: 'past', text: 'Back-filling ' + niceDate(S.date) + '.' }));
+  var farmCalc = h('div', { class: 'calc' });
+  live(function () {
+    var e = E.eggScope(db, allLines(), S.date, []);
+    clear(farmCalc);
+    add(farmCalc, e ? ['Farm today: ', h('b', { text: fmt(e.total) + ' eggs' }), ' | ', h('b', { text: fmt(e.total / 12, 0) + ' doz' }), ' | ' + e.rows + ' of ' + e.expected + ' rows entered | production of the rows entered ', h('b', { text: pct(e.prod) })] : 'No rows entered yet for this day.');
+  });
+  main.appendChild(farmCalc);
+  CFG.barns.forEach(function (bn) {
+    var sum = h('span', { class: 'sub' });
+    live(function () { var e = E.eggScope(db, bn.lines, S.date, []); sum.textContent = e ? fmt(e.total) + ' eggs, ' + pct(e.prod) : 'not entered'; });
+    var kids = [h('div', { class: 'hd' }, [h('h2', { text: bn.name }), sum])];
+    bn.lines.forEach(function (L) {
+      var k = E.key('egg', L, S.date), li = lineInfo(L), c = E.countAt(db, L, S.date), out = h('span', { class: 'note' }), msg = h('div');
+      var empty = c && c.total === 0 && !db.get('egg', L, S.date);
+      live(function () {
+        var e = E.eggDay(db, L, S.date, [L]), cc = E.countAt(db, L, S.date), age = E.ageWeeks(li.hatch, S.date), st = E.stdAt(lineStd(L, S.date), age);
+        out.textContent = (cc ? fmt(cc.total) + ' birds' : 'no bird count') + (e ? ' | ' + pct(e.prod) + (st !== null ? ' (standard ' + fmt(st, 1) + '%)' : '') : '');
+        msg.className = ''; msg.textContent = '';
+        if (e && e.prod !== null && e.prod > 1.02) { msg.className = 'msg warn'; msg.textContent = 'More eggs than birds in this row. Check the number, or the bird count in the Flock planner.'; }
+        else if (e && e.prod !== null && e.total > 0 && st !== null && e.prod * 100 < st - 15) { msg.className = 'msg warn'; msg.textContent = 'More than 15 points under the breed standard for this age. Check for a missed belt or a typing slip.'; }
+      });
+      kids.push(h('div', { class: 'bar' }, [h('h3', { class: 'grow', text: li.alias || li.name }), out]));
+      if (empty) { kids.push(h('div', { class: 'note', text: 'Empty row - no birds.' })); return; }
+      var ins = [];
+      function st1() { stamp(k, 'by'); }
+      if (!c || c.w > 0 || val(k, 'w1') !== undefined) ins.push(field('White eggs', numIn(k, 'w1', { big: true, max: 20000, after: st1 })));
+      if (!c || c.b > 0 || val(k, 'b1') !== undefined) ins.push(field('Brown eggs', numIn(k, 'b1', { big: true, max: 20000, after: st1 })));
+      ins.push(field('Note', textIn(k, 'c')));
+      kids.push(h('div', { class: 'row' }, ins)); kids.push(msg);
+    });
+    main.appendChild(h('div', { class: 'card' }, kids));
+  });
+  var rows = [], ds = rangeDates(S.date, 7), head = ['Row'].concat(ds.map(function (d) { return '#' + niceDate(d).slice(4); }));
+  allLines().forEach(function (L) { rows.push([lineInfo(L).alias || lineInfo(L).name].concat(ds.map(function (d) { var e = E.eggDay(db, L, d, [L]); return e ? fmt(e.total) : ''; }))); });
+  rows.push({ tot: true, c: ['Farm'].concat(ds.map(function (d) { var e = E.eggScope(db, allLines(), d, CFG.groups); return e ? fmt(e.total) + (e.source === 'teams' ? ' *' : '') : ''; })) });
+  main.appendChild(h('div', { class: 'card' }, [h('div', { class: 'hd' }, [h('h2', { text: 'Last 7 days' }), h('span', { class: 'sub', text: '* recorded by team in the old sheet' })]), tbl(head, rows)]));
+}
+
+/* ---------- charts: small inline SVG, one y axis, hover readout */
+function chart(o) {
+  var W = 560, H = o.h || 170, L = 44, R = 10, T = 10, B = 22, box = h('div', { class: 'chart' });
+  var xs = o.dates, n = xs.length, max = 0, min = Infinity, any = false;
+  o.series.forEach(function (s) { s.vals.forEach(function (v) { if (E.isNum(v)) { any = true; if (v > max) max = v; if (v < min) min = v; } }); });
+  if (!any) { box.appendChild(h('div', { class: 'note', text: 'No data in this period.' })); return box; }
+  var lo = o.zero === false ? Math.floor(min - (max - min) * 0.15) : 0; if (max === lo) max = lo + 1;
+  var step = niceStep((max - lo) / 4), top = Math.ceil(max / step) * step; lo = Math.floor(lo / step) * step;
+  function X(i) { return L + (n === 1 ? 0.5 : i / (n - 1)) * (W - L - R); }
+  function Y(v) { return T + (1 - (v - lo) / (top - lo)) * (H - T - B); }
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(t, a) { var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); return e; }
+  var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': o.title || 'chart' });
+  for (var g = lo; g <= top + step / 2; g += step) {
+    svg.appendChild(el('line', { x1: L, x2: W - R, y1: Y(g), y2: Y(g), stroke: '#e6e2d9', 'stroke-width': 1 }));
+    var tx = el('text', { x: L - 6, y: Y(g) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#65717c' }); tx.textContent = fmtAxis(g, step) + (o.unit || ''); svg.appendChild(tx);
+  }
+  [0, Math.floor((n - 1) / 2), n - 1].forEach(function (i, j) {
+    if (n < 3 && j === 1) return;
+    var t = el('text', { x: X(i), y: H - 5, 'text-anchor': j === 0 ? 'start' : j === 2 ? 'end' : 'middle', 'font-size': 11, fill: '#65717c' }); t.textContent = niceDate(xs[i]).slice(4); svg.appendChild(t);
+  });
+  o.series.forEach(function (s) {
+    if (o.bars) {
+      var bw = Math.max(2, (W - L - R) / n - 2);
+      s.vals.forEach(function (v, i) { if (E.isNum(v) && v > 0) svg.appendChild(el('rect', { x: X(i) - bw / 2, y: Y(v), width: bw, height: Math.max(1, Y(lo) - Y(v)), rx: Math.min(3, bw / 2), fill: s.color })); });
+    } else {
+      var d = '', pen = false, last = -1;
+      s.vals.forEach(function (v, i) { if (E.isNum(v)) { d += (pen ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; last = i; } else pen = false; });
+      svg.appendChild(el('path', { d: d, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+      if (last >= 0) svg.appendChild(el('circle', { cx: X(last), cy: Y(s.vals[last]), r: 4, fill: s.color, stroke: '#fff', 'stroke-width': 2 }));
+    }
+  });
+  var cross = el('line', { y1: T, y2: H - B, stroke: '#304251', 'stroke-width': 1, 'stroke-dasharray': '3 3', visibility: 'hidden' }); svg.appendChild(cross);
+  var tip = h('div', { class: 'tip' });
+  function move(ev) {
+    var r = svg.getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left, fx = px / r.width * W;
+    var i = Math.max(0, Math.min(n - 1, Math.round((fx - L) / (W - L - R) * (n - 1))));
+    cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('visibility', 'visible');
+    tip.style.display = 'block'; tip.style.left = Math.max(60, Math.min(r.width - 60, X(i) / W * r.width)) + 'px';
+    tip.textContent = niceDate(xs[i]) + ': ' + o.series.map(function (s) { return (o.series.length > 1 ? s.name + ' ' : '') + (E.isNum(s.vals[i]) ? fmt(s.vals[i], o.dp || 0) + (o.unit || '') : 'no entry'); }).join(' | ');
+  }
+  function out() { cross.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; }
+  svg.addEventListener('mousemove', move); svg.addEventListener('touchstart', move, { passive: true }); svg.addEventListener('touchmove', move, { passive: true }); svg.addEventListener('mouseleave', out); svg.addEventListener('touchend', out);
+  box.appendChild(svg); box.appendChild(tip);
+  if (o.series.length > 1) box.appendChild(h('div', { class: 'legend' }, o.series.map(function (s) { var i = h('i'); i.style.background = s.color; return h('span', null, [i, s.name]); })));
+  return box;
+}
+function niceStep(raw) { var p = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), f = raw / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+function fmtAxis(v, step) { return step >= 1 ? fmt(v) : fmt(v, step >= 0.1 ? 1 : 2); }
+function rangeDates(end, days) { var out = []; for (var i = days - 1; i >= 0; i--) out.push(E.addDays(end, -i)); return out; }
+function chartCard(title, sub, c) { return h('div', { class: 'card' }, [h('div', { class: 'hd' }, [h('h2', { text: title }), h('span', { class: 'sub', text: sub })]), c]); }
+function tile(k, v, s) { return h('div', { class: 'tile' }, [h('div', { class: 'k', text: k }), h('div', { class: 'v', text: v }), s ? h('div', { class: 's', text: s }) : null]); }
+function lastWith(fn, from, back) { for (var i = 0; i < (back || 14); i++) { var d = E.addDays(from, -i), v = fn(d); if (v !== null && v !== undefined) return [d, v]; } return null; }
+
+/* ---------- DASHBOARDS: farm, each barn, each station */
+var C1 = '#007a9c', C2 = '#d97706';
+function viewDash(main) {
+  var end = today(), ds = rangeDates(end, S.dashDays), ym = end.slice(0, 7);
+  var sc = h('div', { class: 'scope noprint' });
+  [['farm', 'Whole farm']].concat(CFG.barns.map(function (b) { return [b.id, b.name]; })).concat(CFG.stations.filter(function (s) { return s.barn !== 'B1'; }).map(function (s) { return [s.id, s.name]; })).forEach(function (x) {
+    sc.appendChild(h('button', { type: 'button', class: S.dashScope === x[0] ? 'on' : '', text: x[1], onclick: function () { S.dashScope = x[0]; route(); } }));
+  });
+  if (S.dashScope === '1ABC') S.dashScope = 'B1';
+  var rg = h('div', { class: 'seg noprint', style: 'max-width:220px' }, [30, 90, 365].map(function (d) { return h('button', { type: 'button', class: S.dashDays === d ? 'on' : '', text: d === 365 ? '1 year' : d + ' days', onclick: function () { S.dashDays = d; route(); } }); }));
+  add(main, [h('div', { class: 'bar' }, [h('h1', { class: 'grow', text: 'Dashboard' }), rg]), sc]);
+  var barn = null, sts, lines, title;
+  for (var i = 0; i < CFG.barns.length; i++) if (CFG.barns[i].id === S.dashScope) barn = CFG.barns[i];
+  if (S.dashScope === 'farm') { sts = CFG.stations; title = CFG.farm; }
+  else if (barn) { sts = CFG.stations.filter(function (s) { return s.barn === barn.id; }); title = barn.name; }
+  else { sts = [station(S.dashScope) || CFG.stations[0]]; title = sts[0].name; }
+  lines = []; sts.forEach(function (s) { lines = lines.concat(s.lines); });
+  var birds = E.birdsOf(db, lines, end), cap = 0; lines.forEach(function (L) { cap += lineInfo(L).cap || 0; });
+  var mStart = 0, mDeaths = 0, mKnown = false, d7 = 0;
+  var mAll = 0;
+  lines.forEach(function (L) { var m = E.mortMonth(db, L, ym); mAll += m.total; if (m.start !== null) { mStart += m.start; mDeaths += m.total; mKnown = true; } for (var j = 0; j < 7; j++) d7 += E.deaths(db.get('mort', L, E.addDays(end, -j))).total; });
+  var tiles = [tile('Birds', fmt(birds), cap && birds !== null ? pct(birds / cap, 0) + ' of ' + fmt(cap) + ' capacity' : ''),
+    tile('Mortality ' + MONTHS[+ym.slice(5) - 1].slice(0, 3), mKnown && mStart > 0 ? pct(mDeaths / mStart, 2) : '-', fmt(mAll) + ' birds this month'),
+    tile('Deaths, 7 days', fmt(d7), 'mortality plus culls')];
+  var lwE = lastWith(function (d) { return E.eggScope(db, lines, d, CFG.groups); }, end);
+  var one = lines.length === 1 ? lines[0] : null;
+  var stdNow = one ? E.stdAt(lineStd(one, end), E.ageWeeks(lineInfo(one).hatch, end)) : null;
+  tiles.push(tile('Production', lwE ? pct(lwE[1].prod) : '-', lwE ? fmt(lwE[1].total) + ' eggs on ' + niceDate(lwE[0]) + (stdNow !== null ? ' - standard ' + fmt(stdNow, 1) + '%' : '') + (lwE[1].source === 'rows' && lwE[1].rows < lwE[1].expected ? ' (' + lwE[1].rows + ' of ' + lwE[1].expected + ' rows)' : '') : 'no collection recorded for this scope'));
+  if (sts.length === 1) {
+    var s0 = sts[0], lw2 = lastWith(function (d) { var w = E.waterDay(db, s0.id, d, s0.lines); return w && w.perBird !== null ? w : null; }, end);
+    tiles.push(tile('Water', lw2 ? fmt(lw2[1].perBird * 1000) + ' mL' : '-', lw2 ? 'per bird per day, ' + niceDate(lw2[0]) : ''));
+    var lt = lastWith(function (d) { var c = db.get('chk', s0.id, d); return c && E.isNum(c.p_t) ? c.p_t : (c && E.isNum(c.a_t) ? c.a_t : null); }, end);
+    tiles.push(tile('Barn temp', lt ? fmt(lt[1], 1) + ' C' : '-', lt ? niceDate(lt[0]) : ''));
+    var li = lineInfo(s0.lines[0]), age = E.ageWeeks(li.hatch, end);
+    if (s0.lines.length === 1) tiles.push(tile('Flock age', age === null ? '-' : fmt(age, 1) + ' wk', (li.breed || '') + (li.kill ? ' - kill ' + li.kill : '')));
+  }
+  add(main, [h('h2', { text: title }), h('div', { class: 'tiles' }, tiles)]);
+  var per = 'last ' + (S.dashDays === 365 ? '12 months' : S.dashDays + ' days');
+  var cards = [];
+  var prodS = [{ name: 'Actual', color: C1, vals: ds.map(function (d) { var e = E.eggScope(db, lines, d, CFG.groups); return e && e.prod !== null ? e.prod * 100 : null; }) }];
+  if (one && lineStd(one, end)) prodS.push({ name: lineStd(one, end).name + ' standard', color: C2, vals: ds.map(function (d) { var c = E.countAt(db, one, d); return c && c.total ? E.stdAt(lineStd(one, d), E.ageWeeks(lineInfo(one).hatch, d)) : null; }) });
+  cards.push(chartCard('Production', 'eggs per bird housed, % - ' + per, chart({ dates: ds, unit: '%', dp: 1, zero: false, title: 'Production percentage', series: prodS })));
+  cards.push(chartCard('Eggs collected', 'eggs per day - ' + per, chart({ dates: ds, title: 'Eggs per day', series: [{ name: 'Eggs', color: C1, vals: ds.map(function (d) { var e = E.eggScope(db, lines, d, CFG.groups); return e ? e.total : null; }) }] })));
+  cards.push(chartCard('Mortality and culls', 'birds per day - ' + per, chart({ dates: ds, bars: true, title: 'Deaths per day', series: [{ name: 'Deaths', color: C1, vals: ds.map(function (d) { var t = 0, any = false; lines.forEach(function (L) { var x = E.deaths(db.get('mort', L, d)); if (x.any) { any = true; t += x.total; } }); return any ? t : null; }) }] })));
+  cards.push(chartCard('Water', 'mL per bird per day - ' + per, chart({ dates: ds, zero: false, title: 'Water per bird', unit: '', series: [{ name: 'Water', color: C1, vals: ds.map(function (d) { var tot = 0, any = false; sts.forEach(function (s) { var w = E.waterDay(db, s.id, d, s.lines); if (w && w.perDay !== null && w.birds) { tot += w.perDay; any = true; } }); var b = 0; sts.forEach(function (s) { var w = E.waterDay(db, s.id, d, s.lines); if (w && w.perDay !== null && w.birds) b += w.birds; }); return any && b > 0 ? tot / b * 1000 : null; }) }] })));
+  if (sts.length === 1) {
+    var sid = sts[0].id;
+    cards.push(chartCard('Temperature', 'degrees C at the AM and PM checks - ' + per, chart({ dates: ds, zero: false, dp: 1, unit: ' C', title: 'Temperature', series: [{ name: 'AM', color: C1, vals: ds.map(function (d) { var c = db.get('chk', sid, d); return c && E.isNum(c.a_t) ? c.a_t : null; }) }, { name: 'PM', color: C2, vals: ds.map(function (d) { var c = db.get('chk', sid, d); return c && E.isNum(c.p_t) ? c.p_t : null; }) }] })));
+    cards.push(chartCard('Ammonia', 'ppm when checked - ' + per, chart({ dates: ds, bars: true, dp: 1, title: 'Ammonia', series: [{ name: 'NH3', color: C1, vals: ds.map(function (d) { var a = db.get('act', sid, d); return a && E.isNum(a.nh3) ? a.nh3 : null; }) }] })));
+  }
+  var feedVals = ds.map(function (d) { var g = 0, nn = 0; lines.forEach(function (L) { var f = E.feedDay(db, L, d); if (f && f.gPerBird !== null) { g += f.gPerBird; nn++; } }); return nn ? g / nn : null; });
+  if (feedVals.some(E.isNum)) cards.push(chartCard('Feed', 'grams per bird per day - ' + per, chart({ dates: ds, zero: false, dp: 1, title: 'Feed per bird', series: [{ name: 'Feed', color: C1, vals: feedVals }] })));
+  main.appendChild(h('div', { class: 'grid wide' }, cards));
+  // per-station table
+  var rows = [h('tr', null, [h('th', { text: 'Station' }), h('th', { class: 'n', text: 'Birds' }), h('th', { class: 'n', text: 'Month mort.' }), h('th', { class: 'n', text: 'Water mL/bird' }), h('th', { class: 'n', text: 'Temp C' }), h('th', { text: 'Today' })])];
+  sts.forEach(function (s) {
+    var b = E.birdsOf(db, s.lines, end), ms = 0, md = 0; s.lines.forEach(function (L) { var m = E.mortMonth(db, L, ym); if (m.start !== null) { md += m.total; ms += m.start; } });
+    var w = lastWith(function (d) { var x = E.waterDay(db, s.id, d, s.lines); return x && x.perBird !== null ? x.perBird : null; }, end, 5);
+    var t = lastWith(function (d) { var c = db.get('chk', s.id, d); return c && E.isNum(c.a_t) ? c.a_t : null; }, end, 5), stt = stStatus(s, end);
+    rows.push(h('tr', null, [h('td', null, h('a', { href: '#dash', text: s.name, onclick: function () { S.dashScope = s.barn === 'B1' ? 'B1' : s.id; } })), h('td', { class: 'n', text: fmt(b) }), h('td', { class: 'n', text: ms > 0 ? pct(md / ms, 2) : '-' }), h('td', { class: 'n', text: w ? fmt(w[1] * 1000) : '-' }), h('td', { class: 'n', text: t ? fmt(t[1], 1) : '-' }),
+      h('td', { class: stt.issues.length ? 'flag' : '', text: stt.empty ? 'Empty' : stt.issues.length ? stt.issues[0] : [stt.am, stt.pm, stt.water, stt.mort].filter(function (x) { return x === 'ok'; }).length + ' of 4 done' })]));
+  });
+  main.appendChild(h('div', { class: 'card' }, [h('div', { class: 'hd' }, [h('h2', { text: 'Stations' })]), h('div', { class: 'tw' }, h('table', null, rows))]));
+  if (lines.length > 1 || sts.length === 1) {
+    var lr = [h('tr', null, [h('th', { text: 'Line' }), h('th', { text: 'Breed' }), h('th', { class: 'n', text: 'Age wk' }), h('th', { class: 'n', text: 'White' }), h('th', { class: 'n', text: 'Brown' }), h('th', { class: 'n', text: 'Capacity' }), h('th', { class: 'n', text: 'Deaths this month' }), h('th', { class: 'n', text: 'Production' }), h('th', { class: 'n', text: 'Standard' })])];
+    lines.forEach(function (L) { var li = lineInfo(L), c = E.countAt(db, L, end), a = E.ageWeeks(li.hatch, end), m = E.mortMonth(db, L, ym); lr.push(h('tr', null, [h('td', { text: li.name }), h('td', { text: li.breed || '' }), h('td', { class: 'n', text: c && c.total && a !== null ? fmt(a, 1) : '-' }), h('td', { class: 'n', text: c ? fmt(c.w) : '-' }), h('td', { class: 'n', text: c ? fmt(c.b) : '-' }), h('td', { class: 'n', text: fmt(li.cap) }), h('td', { class: 'n', text: fmt(m.total) }), (function () { var lw = lastWith(function (d) { return E.eggDay(db, L, d, [L]); }, end, 7), sv = c && c.total ? E.stdAt(lineStd(L, end), a) : null; return [h('td', { class: 'n' + (lw && sv !== null && lw[1].prod !== null && lw[1].prod * 100 < sv - 5 ? ' flag' : ''), text: lw ? pct(lw[1].prod) : '-' }), h('td', { class: 'n', text: sv === null ? '-' : fmt(sv, 1) + '%' })]; })()])); });
+    main.appendChild(h('div', { class: 'card' }, [h('div', { class: 'hd' }, [h('h2', { text: 'Flocks' }), h('a', { class: 'sub', href: '#flocks', text: 'Flock planner' })]), h('div', { class: 'tw' }, h('table', null, lr))]));
+  }
+}
+
+/* ---------- REPORTS: monthly, printable (browser Print gives paper or PDF), CSV for the office */
+function tbl(head, rows, cls) {
+  var t = h('table', { class: cls || null });
+  t.appendChild(h('tr', null, head.map(function (c) { var n = c.charAt(0) === '#'; return h('th', { class: n ? 'n' : null, text: n ? c.slice(1) : c }); })));
+  rows.forEach(function (r) {
+    var tr = h('tr', { class: r.tot ? 'tot' : null });
+    (r.c || r).forEach(function (c, i) { var n = head[i] && head[i].charAt(0) === '#'; tr.appendChild(h('td', { class: (n ? 'n' : '') + (c && c.flag ? ' flag' : '') + (c && c.wrap ? ' wrap' : ''), text: c && typeof c === 'object' ? c.v : (c === null || c === undefined ? '' : c) })); });
+    t.appendChild(tr);
+  });
+  return h('div', { class: 'tw' }, t);
+}
+var RPT_ROWS = [];
+function csvAdd(section, head, rows) { RPT_ROWS.push([section]); RPT_ROWS.push(head.map(function (c) { return c.replace(/^#/, ''); })); rows.forEach(function (r) { RPT_ROWS.push((r.c || r).map(function (c) { return c && typeof c === 'object' ? c.v : (c === null || c === undefined ? '' : c); })); }); RPT_ROWS.push([]); }
+function sect(box, title, head, rows, brk) { box.appendChild(h('h2', { class: brk ? 'pb' : null, text: title })); box.appendChild(tbl(head, rows)); csvAdd(title, head, rows); }
+function daysToShow(ym) { var all = E.monthDates(ym), t = today(); return all.filter(function (d) { return d <= t; }); }
+
+function reportFarm(box, ym) {
+  var rows = [], T = { s: 0, e: 0, d: 0, ds: 0, c: 0, f: 0 };
+  allLines().forEach(function (L) {
+    var m = E.mortMonth(db, L, ym), f = E.feedMonth(db, L, ym), li = lineInfo(L);
+    if (m.start === null && m.end === null && !m.days) return;
+    if (m.start !== null) { T.s += m.start; T.ds += m.total; } if (m.end !== null) T.e += m.end; T.d += m.total; T.c += m.culls; if (f.total !== null) T.f += f.total;
+    rows.push([li.name, fmt(m.start), fmt(m.end), fmt(m.total - m.culls), fmt(m.culls), fmt(m.total), pct(m.pct, 2), f.total === null ? '-' : fmt(f.total, 2), f.gPerBird === null ? '-' : fmt(f.gPerBird, 1)]);
+  });
+  rows.push({ tot: true, c: ['Farm', fmt(T.s), fmt(T.e), fmt(T.d - T.c), fmt(T.c), fmt(T.d), T.s ? pct(T.ds / T.s, 2) : '-', T.f ? fmt(T.f, 2) : '-', ''] });
+  sect(box, 'Flock and mortality', ['Line', '#Birds start', '#Birds end', '#Mortality', '#Culls', '#Total out', '#Mortality %', '#Feed t', '#Feed g/bird'], rows);
+  box.appendChild(h('p', { class: 'note', text: 'Birds start and end follow the bird count ledger, so placements, moves and depopulations change the count without being counted as mortality.' }));
+  var er = [], all = allLines(), fm = E.eggScopeMonth(db, all, ym, CFG.groups), endD = daysToShow(ym).slice(-1)[0] || (ym + '-01');
+  all.forEach(function (L) {
+    var m = E.eggScopeMonth(db, [L], ym, []); if (!m.days) return;
+    var li = lineInfo(L), f = E.feedMonth(db, L, ym), fd = E.feedPerDozen(f.total, m.total), sv = E.stdAt(lineStd(L, endD), E.ageWeeks(li.hatch, endD));
+    er.push([li.alias || li.name, m.days, fmt(m.white), fmt(m.brown), fmt(m.total), fmt(m.total / 12, 0), fmt(m.avgDay, 0), pct(m.avgProd), sv === null ? '-' : fmt(sv, 1) + '%', fd === null ? '-' : fmt(fd, 2)]);
+  });
+  if (er.length) sect(box, 'Egg production by row', ['Row', '#Days', '#White', '#Brown', '#Total eggs', '#Dozens', '#Avg / day', '#Avg production', '#Standard now', '#Feed kg/doz'], er);
+  if (fm.days) sect(box, 'Egg production: whole farm', ['Scope', '#Days', '#White', '#Brown', '#Total eggs', '#Doz white', '#Doz brown', '#Avg / day', '#Avg production'], [['Farm', fm.days, fmt(fm.white), fmt(fm.brown), fmt(fm.total), fmt(fm.dozWhite, 0), fmt(fm.dozBrown, 0), fmt(fm.avgDay, 0), pct(fm.avgProd)]]);
+  box.appendChild(h('p', { class: 'note', text: 'Days recorded by team in the old sheet count in the farm line only. A team total is never split between rows.' }));
+  var wr = [], n = daysToShow(ym).length;
+  CFG.stations.forEach(function (s) {
+    var w = E.waterMonth(db, s.id, ym, s.lines), c = E.chkMonth(db, s.id, ym);
+    wr.push([s.name, fmt(w.total), fmt(w.avgDay, 0), w.perBird === null ? '-' : fmt(w.perBird * 1000, 0), c.am + ' / ' + n, c.pm + ' / ' + n, { v: c.minMaxDays + ' / ' + n, flag: c.minMaxDays < n }, { v: c.flyChecks + ' / ' + (2 * n), flag: c.flyChecks < 2 * n }, c.issues, c.leakDays, c.tMin === null ? '-' : fmt(c.tMin, 1), c.tAvg === null ? '-' : fmt(c.tAvg, 1), c.tMax === null ? '-' : fmt(c.tMax, 1)]);
+  });
+  sect(box, 'Water and daily checks', ['Station', '#Water L', '#Avg L/day', '#mL/bird/day', '#AM checks', '#PM checks', '#Min+max days', '#Fly checks', '#Issues', '#Leak days', '#Temp min', '#Temp avg', '#Temp max'], wr);
+  var dr = [], anyE = false;
+  daysToShow(ym).forEach(function (d) {
+    var e = E.eggScope(db, all, d, CFG.groups); if (e) anyE = true;
+    dr.push([+d.slice(8)].concat(all.map(function (L) { var x = E.eggDay(db, L, d, [L]); return x ? fmt(x.total) : ''; })).concat([e ? fmt(e.birds) : '', e ? fmt(e.total) : '', e ? { v: pct(e.prod), flag: e.prod !== null && e.prod > 1.02 } : '', e ? (e.source === 'teams' ? 'by team' : e.rows + ' of ' + e.expected + ' rows') : '']));
+  });
+  if (anyE) sect(box, 'Daily egg collection', ['Day'].concat(all.map(function (L) { return '#' + L; })).concat(['#Birds', '#Farm eggs', '#Production', 'Recorded']), dr, true);
+}
+function reportStation(box, ym, st) {
+  var ds = daysToShow(ym), w = E.waterMonth(db, st.id, ym, st.lines), c = E.chkMonth(db, st.id, ym);
+  box.appendChild(h('div', { class: 'tiles' }, [tile('Water used', fmt(w.total) + ' L', fmt(w.avgDay, 0) + ' L/day'), tile('Water per bird', w.perBird === null ? '-' : fmt(w.perBird * 1000) + ' mL', 'per day'), tile('Checks done', c.am + ' AM, ' + c.pm + ' PM', 'of ' + ds.length + ' days'), tile('Temperature', c.tAvg === null ? '-' : fmt(c.tAvg, 1) + ' C', c.tMin === null ? '' : 'range ' + fmt(c.tMin, 1) + ' to ' + fmt(c.tMax, 1)), tile('Audit items', c.auditDays + ' of ' + ds.length + ' days', 'min+max on ' + c.minMaxDays + ' days, ' + c.flyChecks + ' of ' + (2 * ds.length) + ' fly checks')]));
+  var rows = ds.map(function (d) {
+    var x = E.waterDay(db, st.id, d, st.lines), r = db.get('water', st.id, d) || {};
+    return [+d.slice(8), E.isNum(r.r) ? fmt(r.r) : '', r.tm || '', x && x.diff !== null ? fmt(x.diff) : (x && x.flag === 'back' ? { v: 'CHECK', flag: true } : ''), x && x.lph !== null ? fmt(x.lph, 1) : '', x && x.perBird !== null ? fmt(x.perBird * 1000) : '', r.by || '', { v: (r.rs ? 'Meter replaced. ' : '') + (r.c || ''), wrap: true }];
+  });
+  rows.push({ tot: true, c: ['Month', '', '', fmt(w.total), fmt(w.avgHour, 1), w.perBird === null ? '' : fmt(w.perBird * 1000), '', ''] });
+  sect(box, 'Water', ['Day', '#Meter reading', 'Time', '#Used L', '#L/hour', '#mL/bird/day', 'By', 'Comments / additives'], rows);
+  var W = { ok: 'No leaks', leak: 'LEAKS' }, F = { ok: 'Good', leak: 'FEED LEAK', poor: 'POOR' }, H2 = { ok: 'Good', poor: 'POOR' };
+  function chkRows(sl) {
+    return ds.map(function (d) {
+      var r = db.get('chk', st.id, d) || {}, p = sl + '_';
+      function bad(v, map) { return v ? { v: map[v] || v, flag: v !== 'ok' } : ''; }
+      return [+d.slice(8), bad(r[p + 'w'], W), bad(r[p + 'f'], F), bad(r[p + 'h'], H2), E.isNum(r[p + 'wb']) ? { v: r[p + 'wb'], flag: r[p + 'wb'] > 0 } : '', E.isNum(r[p + 'fl']) ? { v: FLY[r[p + 'fl']], flag: r[p + 'fl'] >= 2 } : '', E.isNum(r[p + 't']) ? fmt(r[p + 't'], 1) : '', E.isNum(r[sl === 'a' ? 'a_tn' : 'p_tx']) ? fmt(r[sl === 'a' ? 'a_tn' : 'p_tx'], 1) : '', r[p + 'tm'] || '', r[p + 'by'] || '', { v: r[p + 'c'] || '', wrap: true }];
+    });
+  }
+  sect(box, 'Daily checklist: AM', ['Day', 'Water supply', 'Feeders', 'Health of hens', '#Wild birds', 'Flies', '#Temp C', '#Temp min', 'Time', 'By', 'Comments'], chkRows('a'), true);
+  sect(box, 'Daily checklist: PM', ['Day', 'Water supply', 'Feeders', 'Health of hens', '#Wild birds', 'Flies', '#Temp C', '#Temp max', 'Time', 'By', 'Comments'], chkRows('p'));
+  st.lines.forEach(function (L, i) {
+    var m = E.mortMonth(db, L, ym), li = lineInfo(L);
+    if (m.start === null && !m.days) return;
+    var mr = ds.map(function (d) {
+      var r = db.get('mort', L, d) || {}, cc = E.countAt(db, L, d), ev = db.get('cnt', L, d);
+      function g(f) { return E.isNum(r[f]) ? r[f] : ''; }
+      return [+d.slice(8), g('wa'), g('wac'), g('ba'), g('bac'), r.aby || '', g('wp'), g('wpc'), g('bp'), g('bpc'), r.pby || '', cc ? fmt(cc.w) : '', cc ? fmt(cc.b) : '', cc ? fmt(cc.total) : '', { v: ev ? 'Count set to ' + fmt((ev.w || 0) + (ev.b || 0)) + (ev.why ? ' - ' + ev.why : '') : '', wrap: true }];
+    });
+    mr.push({ tot: true, c: ['Month', '', '', '', '', '', '', '', '', '', '', fmt(m.endW), fmt(m.endB), fmt(m.end), 'Out: ' + fmt(m.total) + ' (' + pct(m.pct, 2) + ' of ' + fmt(m.start) + ')'] });
+    sect(box, 'Mortality: ' + li.name, ['Day', '#W AM dead', '#W AM cull', '#B AM dead', '#B AM cull', 'AM by', '#W PM dead', '#W PM cull', '#B PM dead', '#B PM cull', 'PM by', '#White', '#Brown', '#Total birds', 'Count changes'], mr, i === 0);
+  });
+  st.lines.forEach(function (L) {
+    var em = E.eggScopeMonth(db, [L], ym, []); if (!em.days) return;
+    var li = lineInfo(L), rr = ds.map(function (d) { var r = db.get('egg', L, d) || {}, e = E.eggDay(db, L, d, [L]), sv = E.stdAt(lineStd(L, d), E.ageWeeks(li.hatch, d)); return [+d.slice(8), e ? fmt(e.birds) : '', E.isNum(r.w1) ? fmt(r.w1) : '', E.isNum(r.b1) ? fmt(r.b1) : '', e ? fmt(e.total) : '', e ? { v: pct(e.prod), flag: e.prod !== null && e.prod > 1.02 } : '', e && sv !== null ? fmt(sv, 1) + '%' : '', r.by || '', { v: r.c || '', wrap: true }]; });
+    rr.push({ tot: true, c: ['Month', '', fmt(em.white), fmt(em.brown), fmt(em.total), pct(em.avgProd), '', '', fmt(em.total / 12, 0) + ' dozen'] });
+    sect(box, 'Egg collection: ' + (li.alias || li.name), ['Day', '#Birds', '#White', '#Brown', '#Total', '#Production', '#Standard', 'By', 'Note'], rr);
+  });
+  var se = seasonFor(ym + '-01'), ar = ds.map(function (d) { var r = db.get('act', st.id, d) || {}; return [+d.slice(8)].concat(se.tasks.map(function (t) { return r[t[0]] ? 'Done' : ''; })).concat([E.isNum(r.nh3) ? fmt(r.nh3, 1) : '', r.tm || '', r.by || '']); });
+  sect(box, 'Activity log (' + se.name.toLowerCase() + ')', ['Day'].concat(se.tasks.map(function (t) { return t[1]; })).concat(['#Ammonia ppm', 'Time', 'By']), ar, true);
+  st.lines.forEach(function (L) {
+    var f = E.feedMonth(db, L, ym); if (!f.days && f.delivered === null) return;
+    var fr = ds.map(function (d) { var r = db.get('feed', L, d) || {}, x = E.feedDay(db, L, d); return [+d.slice(8), E.isNum(r.bin) ? fmt(r.bin, 2) : '', E.isNum(r.i) ? fmt(r.i, 2) : '', x && x.gPerBird !== null ? fmt(x.gPerBird, 1) : '', E.isNum(r.del) ? fmt(r.del, 2) : '', r.ra || '']; });
+    fr.push({ tot: true, c: ['Month', '', fmt(f.total, 2), f.gPerBird === null ? '' : fmt(f.gPerBird, 1), f.delivered === null ? '' : fmt(f.delivered, 2), ''] });
+    sect(box, 'Feed: ' + lineInfo(L).name, ['Day', '#Bin reading', '#Intake t', '#g/bird', '#Delivered t', 'Ration'], fr);
+    if (sz.length) sect(box, 'Egg sizing: ' + lineInfo(L).name, ['Date', 'Ration', '#W Jumbo', '#W XL', '#W Large', '#W Medium', '#W Small', '#B Jumbo', '#B XL', '#B Large', '#B Medium', '#B Small'], sz.map(function (d) { var r = db.get('size', L, d); return [d, r.ra || ''].concat(['wj', 'wx', 'wl', 'wm', 'ws', 'bj', 'bx', 'bl', 'bm', 'bs'].map(function (k) { return E.isNum(r[k]) ? r[k] + '%' : ''; })); }));
+  });
+  st.lines.forEach(function (L) {
+    var sz = db.dates('size', L).filter(function (d) { return d.slice(0, 7) === ym; });
+  });
+}
+function viewReports(main) {
+  var sel = h('select', { id: 'rpt_scope', class: 'in', onchange: function () { S.rptScope = sel.value; route(); } }, [h('option', { value: 'farm', text: 'Whole farm summary' })].concat(CFG.stations.map(function (s) { return h('option', { value: s.id, text: s.name + ' - full monthly record' }); })));
+  sel.value = S.rptScope;
+  add(main, h('div', { class: 'card noprint' }, [
+    h('h1', { text: 'Monthly reports' }),
+    h('div', { class: 'datebar' }, [h('button', { type: 'button', class: 'btn sm', text: '<', 'aria-label': 'Previous month', onclick: function () { S.rptMonth = E.addMonths(S.rptMonth, -1); route(); } }), h('div', { class: 'd', text: niceMonth(S.rptMonth) }), h('button', { type: 'button', class: 'btn sm', text: '>', 'aria-label': 'Next month', disabled: S.rptMonth >= today().slice(0, 7), onclick: function () { S.rptMonth = E.addMonths(S.rptMonth, 1); route(); } })]),
+    field('Report', sel),
+    h('div', { class: 'bar' }, [
+      h('button', { type: 'button', class: 'btn pri', text: 'Print or save as PDF', onclick: function () { try { window.print(); } catch (e) { } } }),
+      h('button', { type: 'button', class: 'btn', text: 'Download CSV', onclick: function () { download('daybreak-' + S.rptScope + '-' + S.rptMonth + '.csv', RPT_ROWS.map(function (r) { return r.map(function (c) { c = String(c); return /[",\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\r\n'), 'text/csv'); } })
+    ]),
+    window.DBK_PREVIEW ? h('div', { class: 'banner', text: 'Review copy: printing and downloads are switched off inside the Claude preview frame. They work in the installed app. The report below is exactly what prints.' }) : null,
+    h('p', { class: 'note', text: 'In the print window choose "Save as PDF" as the printer to get a PDF. The page is set up for letter paper, landscape.' })
+  ]));
+  RPT_ROWS = [];
+  var st = station(S.rptScope), box = h('div', { class: 'card rpt' });
+  box.appendChild(h('div', { class: 'rpt-head' }, [h('div', { class: 'logo' }, h('img', { src: LOGO, alt: 'Daybreak Farms' })), h('div', null, [h('h1', { text: (st ? st.name + ' monthly record' : 'Farm monthly summary') + ' - ' + niceMonth(S.rptMonth) }), h('div', { class: 'note', text: CFG.farm + (st ? ' - ' + st.sub : '') + ' - printed ' + today() + (S.user ? ' by ' + S.user : '') })])]));
+  if (st) reportStation(box, S.rptMonth, st); else reportFarm(box, S.rptMonth);
+  box.appendChild(h('div', { class: 'sig' }, [h('span', { text: 'Reviewed by' }), h('span', { text: 'Date' })]));
+  main.appendChild(box);
+}
+function download(name, text, type) {
+  try {
+    var a = h('a', { href: URL.createObjectURL(new Blob([text], { type: type })), download: name });
+    document.body.appendChild(a); a.click(); setTimeout(function () { document.body.removeChild(a); }, 500);
+  } catch (e) { }
+}
+
+/* ---------- FLOCKS: planner, quota and the bird count ledger */
+function viewFlocks(main) {
+  var end = today(), tot = 0, Q = quota(), allow = Q ? Q.total : null;
+  var rows = [];
+  CFG.barns.forEach(function (b) {
+    var bt = 0, bc = 0;
+    b.lines.forEach(function (L) {
+      var li = lineInfo(L), c = E.countAt(db, L, end), a = E.ageWeeks(li.hatch, end), n = c ? c.total : null, dk = li.kill ? E.toDays(li.kill) - E.toDays(end) : null;
+      if (n !== null) bt += n; bc += li.cap || 0;
+      rows.push([li.name, li.breed || '', li.cpp || '', li.hatch || '', li.placed || '', n && a !== null ? fmt(a, 1) : '-', c ? fmt(c.w) : '-', c ? fmt(c.b) : '-', fmt(li.cap), li.cap && c ? pct(n / li.cap, 0) : '-', li.kill || '', dk === null ? '' : { v: dk, flag: dk < 14 }]);
+    });
+    tot += bt;
+    rows.push({ tot: true, c: [b.name, '', '', '', '', '', '', fmt(bt), fmt(bc), bc ? pct(bt / bc, 0) : '', '', ''] });
+  });
+  add(main, [h('h1', { text: 'Flock planner' }),
+    h('div', { class: 'tiles' }, [tile('Birds on farm', fmt(tot), 'as of today'), tile('Total allowable', Q ? fmt(allow) : '-', Q ? 'base ' + fmt(Q.base) + ' + TAP B ' + fmt(Q.tapB) + ' + sleeve ' + fmt(Q.sleeve) : 'quota not entered yet'), tile('Room under quota', Q ? fmt(allow - tot) : '-', Q && allow ? pct(tot / allow, 0) + ' used' : '')]),
+    h('div', { class: 'card' }, [tbl(['Line', 'Breed', 'CPP #', 'Hatched', 'Placed', '#Age wk', '#White', '#Brown', '#Capacity', '#Fill', 'Kill date', '#Days to kill'], rows)])]);
+  // ledger form
+  var F = { line: 'A', date: end, w: '', b: '', why: 'Placement' };
+  var ls1 = h('select', { id: 'fl_line', class: 'in' }, allLines().map(function (L) { return h('option', { value: L, text: CFG.lines[L].name }); }));
+  var dt = h('input', { id: 'fl_date', class: 'in', type: 'date', value: end, max: end }), wi = h('input', { id: 'fl_w', class: 'in num', inputmode: 'numeric' }), bi = h('input', { id: 'fl_b', class: 'in num', inputmode: 'numeric' });
+  var why = h('select', { id: 'fl_why', class: 'in' }, ['Placement', 'Moved in', 'Moved out', 'Depopulated', 'Recount'].map(function (x) { return h('option', { text: x }); })), note = h('div', { class: 'note' }), msg = h('div');
+  function cur() { var c = E.countStart(db, ls1.value, dt.value); note.textContent = c ? 'Count before this change: ' + fmt(c.w) + ' white, ' + fmt(c.b) + ' brown.' : 'No count recorded yet for this line.'; }
+  ls1.addEventListener('change', cur); dt.addEventListener('change', cur); cur();
+  add(main, h('div', { class: 'card' }, [h('h2', { text: 'Record a placement, move, depopulation or recount' }),
+    h('p', { class: 'note', text: 'Enter the birds in the line at the START of that day, after the change. Daily mortality comes off this number from then on. This replaces editing the month-start counts by hand.' }),
+    h('div', { class: 'row' }, [field('Line', ls1), field('Date', dt), field('White birds', wi), field('Brown birds', bi), field('Reason', why)]), note, msg,
+    h('button', { type: 'button', class: 'btn pri', text: 'Save bird count' + (pinSet() ? ' (supervisor PIN)' : ''), onclick: function () {
+      if (!needUser()) return;
+      var w = wi.value.trim() === '' ? 0 : Number(wi.value), b = bi.value.trim() === '' ? 0 : Number(bi.value);
+      if (!dt.value || !isFinite(w) || !isFinite(b) || w < 0 || b < 0 || (wi.value.trim() === '' && bi.value.trim() === '')) { msg.className = 'msg bad'; msg.textContent = 'Enter a date and at least one bird count (0 for an emptied line).'; return; }
+      withPin(function () { setMany(E.key('cnt', ls1.value, dt.value), { w: w, b: b, why: why.value, by: S.user }); route(); });
+    } })]));
+  var ev = [];
+  allLines().forEach(function (L) { db.dates('cnt', L).forEach(function (d) { var r = db.get('cnt', L, d); ev.push([d, CFG.lines[L].name, fmt(r.w || 0), fmt(r.b || 0), r.why || '', r.by || '']); }); });
+  ev.sort(function (a, b) { return a[0] < b[0] ? 1 : -1; });
+  add(main, h('div', { class: 'card' }, [h('h2', { text: 'Bird count history' }), tbl(['Date', 'Line', '#White', '#Brown', 'Reason', 'By'], ev.slice(0, 40))]));
+  var qc = h('div', { class: 'card' }, [h('h2', { text: 'Quota' })]);
+  function qi(f, label) { var el = h('input', { id: 'q_' + f, class: 'in num', inputmode: 'numeric' }); el.value = Q && Q[f] ? String(Q[f]) : ''; el.addEventListener('change', function () { var n = Number(el.value.replace(/,/g, '')); if (!isFinite(n) || n < 0) return; withPin(function () { setF('cfg|quota', f, n); route(); }); }); return field(label, el); }
+  qc.appendChild(h('div', { class: 'row' }, [qi('base', 'Base quota'), qi('tapB', 'TAP B'), qi('sleeve', 'Production sleeve')]));
+  main.appendChild(qc);
+  // flock details
+  var ed = h('div', { class: 'card' }, [h('h2', { text: 'Flock details' }), h('p', { class: 'note', text: 'Age, days to kill and capacity fill are worked out from these. Update them when a new flock is placed.' })]);
+  allLines().forEach(function (L) {
+    var k = 'flock|' + L, li = lineInfo(L);
+    function ti(f, type) { var el = h('input', { id: fid(k, f), class: 'in', type: type || 'text' }); el.value = li[f] || ''; el.addEventListener('change', function () { withPin(function () { setF(k, f, el.value.trim() || 'none'); }); }); return el; }
+    var ss1 = h('select', { id: fid(k, 'std'), class: 'in' }, [h('option', { value: '', text: 'Automatic (bird colour and housing)' })].concat(Object.keys(STANDARDS).map(function (x) { return h('option', { value: x, text: STANDARDS[x].name }); })).concat([h('option', { value: 'off', text: 'No standard' })]));
+    ss1.value = (db.get('flock', L, '') || {}).std || ''; ss1.addEventListener('change', function () { withPin(function () { setF(k, 'std', ss1.value || 'none'); }); });
+    ed.appendChild(h('details', null, [h('summary', { text: li.name + ' - ' + (li.breed || 'breed not set') }), h('div', { class: 'row' }, [field('Breed', ti('breed')), field('CPP #', ti('cpp')), field('Placement date', ti('placed', 'date')), field('Age at placement (weeks)', ti('ageAt')), field('Hatch date', ti('hatch', 'date')), field('Kill date', ti('kill', 'date')), field('Breed standard', ss1)])]));
+  });
+  main.appendChild(ed);
+}
+
+/* ---------- MAINTENANCE */
+function shrink(file, cb) {
+  var rd = new FileReader();
+  rd.onload = function () { var im = new Image(); im.onload = function () { var s = Math.min(1, 1000 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * s); c.height = Math.round(im.height * s); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); cb(c.toDataURL('image/jpeg', 0.6)); }; im.onerror = function () { cb(''); }; im.src = rd.result; };
+  rd.onerror = function () { cb(''); }; rd.readAsDataURL(file);
+}
+function viewMaint(main) {
+  var ids = db.units('maint').filter(function (id) { return db.get('maint', id, ''); });
+  var list = ids.map(function (id) { var r = db.get('maint', id, ''); return { id: id, r: r }; }).sort(function (a, b) { return (a.r.date || '') < (b.r.date || '') ? 1 : -1; });
+  var open = list.filter(function (x) { return x.r.status === 'open'; }).length;
+  add(main, [h('div', { class: 'bar' }, [h('h1', { class: 'grow', text: 'Maintenance record' }), h('span', { class: 'chip ' + (open ? 'bad' : 'ok'), text: open + ' open' })])]);
+  var k = 'maint|m' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), D = {}, ph = { before: '', after: '' }, busy = 0;
+  function inp(f, label, o) { o = o || {}; var el = h(o.area ? 'textarea' : 'input', { id: 'mt_' + f, class: 'in', type: o.type || 'text', rows: o.area ? 2 : null }); if (o.val) el.value = o.val; el.addEventListener('input', function () { D[f] = el.value.trim(); }); if (o.val) D[f] = o.val; return field(label, el); }
+  var wsel = h('select', { id: 'mt_where', class: 'in', onchange: function () { D.where = wsel.value; } }, CFG.stations.map(function (s) { return h('option', { text: s.sub.indexOf('Barn') === 0 ? s.sub.split(' Free')[0] + ' / ' + s.name : s.name }); }).concat([h('option', { text: 'Gather room' }), h('option', { text: 'Other' })]));
+  D.where = wsel.value;
+  function photo(f, label) { var prev = h('span'), fi = h('input', { id: 'mt_ph_' + f, type: 'file', accept: 'image/*', class: 'in' }); fi.addEventListener('change', function () { if (fi.files && fi.files[0]) { busy++; shrink(fi.files[0], function (u) { busy--; ph[f] = u; clear(prev); if (u) prev.appendChild(h('img', { class: 'thumb', src: u, alt: label })); else prev.textContent = 'That photo could not be read.'; }); } }); return h('div', { class: 'f' }, [h('label', { 'for': fi.id, text: label }), fi, prev]); }
+  var msg = h('div');
+  add(main, h('details', { class: 'card' }, [h('summary', { text: 'Report a problem or log a repair' }),
+    h('div', { class: 'row' }, [inp('date', 'Date', { type: 'date', val: today() }), field('Barn / row', wsel), inp('equip', 'Equipment / area')]),
+    inp('problem', 'Problem', { area: true }), inp('action', 'Action taken (leave blank if still open)', { area: true }),
+    h('div', { class: 'row' }, [inp('req', 'Requested by', { val: S.user }), inp('doneBy', 'Done by')]),
+    h('div', { class: 'row' }, [photo('before', 'Photo before'), photo('after', 'Photo after')]), msg,
+    h('button', { type: 'button', class: 'btn pri', text: 'Save record', onclick: function () {
+      if (!needUser()) return;
+      if (busy) { msg.className = 'msg warn'; msg.textContent = 'The photo is still being prepared. Tap Save again in a moment.'; return; }
+      if (!D.problem) { msg.className = 'msg bad'; msg.textContent = 'Describe the problem first.'; return; }
+      D.status = D.action ? 'done' : 'open'; if (ph.before) D.before = ph.before; if (ph.after) D.after = ph.after;
+      setMany(k, D); route();
+    } })]));
+  list.forEach(function (x) {
+    var r = x.r, kk = 'maint|' + x.id, st = r.status || 'done';
+    function pic(u, label) { if (!u) return null; return u.indexOf('data:') === 0 ? h('img', { class: 'thumb', src: u, alt: label }) : h('a', { href: u, target: '_blank', rel: 'noopener', text: label }); }
+    main.appendChild(h('div', { class: 'card stripe ' + (st === 'open' ? 'bad' : st === 'signed' ? 'ok' : 'part') }, [
+      h('div', { class: 'hd' }, [h('h2', { text: (r.where || '') + ' - ' + (r.equip || '') }), h('span', { class: 'sub', text: r.date || '' }), chip(st === 'open' ? 'Open' : st === 'signed' ? 'Signed off' + (r.sign ? ' ' + r.sign : '') : 'Done, needs sign-off', st === 'open' ? 'bad' : st === 'signed' ? 'ok' : 'part')]),
+      h('div', null, [h('b', { text: 'Problem: ' }), r.problem || '']), r.action ? h('div', null, [h('b', { text: 'Action: ' }), r.action]) : null,
+      h('div', { class: 'note', text: 'Requested by ' + (r.req || '-') + ' . Done by ' + (r.doneBy || '-') }),
+      h('div', { class: 'bar' }, [pic(r.before, 'Photo before'), pic(r.after, 'Photo after')]),
+      st === 'open' ? h('div', { class: 'bar noprint' }, [(function () { var a = h('input', { id: 'mt_fix_' + x.id, class: 'in grow', placeholder: 'Action taken' }); return a; })(), h('button', { type: 'button', class: 'btn sm pri', text: 'Mark done', onclick: function () { if (!needUser()) return; var a = $('mt_fix_' + x.id).value.trim(); if (!a) return; setMany(kk, { action: a, doneBy: S.user, status: 'done' }); route(); } })]) : null,
+      st === 'done' ? h('button', { type: 'button', class: 'btn sm noprint', text: 'Supervisor sign-off as ' + (S.user || '...'), onclick: function () { withPin(function () { setMany(kk, { sign: S.user, status: 'signed' }); route(); }); } }) : null
+    ]));
+  });
+}
+
+/* ---------- EGG SIZING */
+function viewSizing(main) {
+  var Ls = allLines(), sel = h('select', { id: 'sz_line', class: 'in' }, Ls.map(function (L) { return h('option', { value: L, text: CFG.lines[L].name }); }));
+  var dt = h('input', { id: 'sz_date', class: 'in', type: 'date', value: today(), max: today() }), ra = h('input', { id: 'sz_ra', class: 'in', placeholder: 'e.g. Ration 17' });
+  var col = 'w', cs = h('div', { class: 'seg' }), sum = h('div', { class: 'calc' }), msg = h('div');
+  var ins = ['Jumbo', 'Extra large', 'Large', 'Medium', 'Small'].map(function (n, i) { var e = h('input', { id: 'sz_' + i, class: 'in num', inputmode: 'decimal' }); e.addEventListener('input', tot); return [n, e]; });
+  function tot() { var t = 0; ins.forEach(function (x) { t += Number(x[1].value) || 0; }); sum.textContent = 'Total ' + t + '% ' + (Math.abs(t - 100) <= 1 ? '- adds up' : '- should add up to 100%'); return t; }
+  [['w', 'White eggs'], ['b', 'Brown eggs']].forEach(function (o) { cs.appendChild(h('button', { type: 'button', class: o[0] === col ? 'on' : '', text: o[1], onclick: function () { col = o[0]; Array.prototype.forEach.call(cs.children, function (b, i) { b.className = i === (col === 'w' ? 0 : 1) ? 'on' : ''; }); } })); });
+  tot();
+  add(main, [h('h1', { text: 'Egg sizing' }), h('div', { class: 'card' }, [h('div', { class: 'row' }, [field('Line', sel), field('Date graded', dt), field('Feed ration', ra)]), cs,
+    h('div', { class: 'row' }, ins.map(function (x) { return field(x[0] + ' %', x[1]); })), sum, msg,
+    h('button', { type: 'button', class: 'btn pri', text: 'Save sizing', onclick: function () {
+      if (!needUser()) return;
+      if (Math.abs(tot() - 100) > 1) { msg.className = 'msg bad'; msg.textContent = 'The five sizes must add up to 100%.'; return; }
+      var o = {}, keys = ['j', 'x', 'l', 'm', 's']; ins.forEach(function (x, i) { o[col + keys[i]] = Number(x[1].value) || 0; }); if (ra.value.trim()) o.ra = ra.value.trim();
+      setMany(E.key('size', sel.value, dt.value), o); route();
+    } })])]);
+  var rows = [];
+  Ls.forEach(function (L) { db.dates('size', L).forEach(function (d) { var r = db.get('size', L, d); rows.push([d, CFG.lines[L].name, r.ra || ''].concat(['wj', 'wx', 'wl', 'wm', 'ws', 'bj', 'bx', 'bl', 'bm', 'bs'].map(function (k) { return E.isNum(r[k]) ? r[k] + '%' : ''; }))); }); });
+  rows.sort(function (a, b) { return a[0] < b[0] ? 1 : -1; });
+  add(main, h('div', { class: 'card' }, [h('h2', { text: 'Sizing history' }), tbl(['Date', 'Line', 'Ration', '#W Jumbo', '#W XL', '#W Large', '#W Med', '#W Small', '#B Jumbo', '#B XL', '#B Large', '#B Med', '#B Small'], rows.slice(0, 60))]));
+}
+
+/* ---------- MORE and SETUP */
+function viewMore(main) {
+  add(main, [h('h1', { text: 'More' }), h('div', { class: 'grid' }, [
+    ['#flocks', 'Flock planner', 'Bird counts, placements and moves, quota, ages and kill dates'],
+    ['#maint', 'Maintenance record', 'Report a problem, log a repair with photos, supervisor sign-off'],
+    ['#sizing', 'Egg sizing', 'Grading results by line and ration'],
+    ['#reports', 'Monthly reports', 'Print or save as PDF, download CSV'],
+    ['#setup', 'Setup and sync', 'Staff initials, sync, backup']
+  ].map(function (x) { return h('a', { class: 'card', href: x[0] }, [h('h2', { text: x[1] }), h('div', { class: 'note', text: x[2] })]); }))]);
+}
+function viewSetup(main) {
+  var n = Object.keys(db.recs).length, pend = Object.keys(OUTBOX).length;
+  var url = h('input', { id: 'su_url', class: 'in', placeholder: 'https://script.google.com/macros/s/.../exec', value: syncUrl() }), pass = h('input', { id: 'su_pass', class: 'in', type: 'password', autocomplete: 'off', value: ls('pass') || '' }), sm = h('div');
+  var staff = h('input', { id: 'su_staff', class: 'in', value: staffList().join(', ') });
+  add(main, [h('h1', { text: 'Setup and sync' }),
+    !STORE_OK ? h('div', { class: 'banner bad', text: 'This browser is not keeping data on the device (private window or storage blocked). Entries would be lost when the page closes. Open the app in a normal browser window.' }) : null,
+    h('div', { class: 'card' }, [h('h2', { text: 'This device' }), h('div', { class: 'note', text: fmt(n) + ' records on this device . ' + pend + ' waiting to sync . last sync ' + (SYNC.last ? SYNC.last.slice(0, 16).replace('T', ' ') + ' UTC' : 'never') + ' . app ' + APP_VERSION + ' . engine ' + E.ENGINE_VERSION }),
+      h('button', { type: 'button', class: 'btn', text: 'Change who is entering (' + (S.user || 'not set') + ')', onclick: function () { pickUser(route); } })]),
+    h('div', { class: 'card' }, [h('h2', { text: 'Staff initials' }), field('Initials, separated by commas', staff), h('button', { type: 'button', class: 'btn', text: 'Save staff list', onclick: function () { withPin(function () { setF('cfg|staff', 'list', staff.value.split(',').map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean).join(',')); route(); }); } })]),
+    (function () { var p1 = h('input', { id: 'su_pin1', class: 'in', type: 'password', inputmode: 'numeric', autocomplete: 'off' }), p2 = h('input', { id: 'su_pin2', class: 'in', type: 'password', inputmode: 'numeric', autocomplete: 'off' }), pm = h('div');
+      return h('div', { class: 'card' }, [h('h2', { text: 'Supervisor PIN' }), pinSet() ? h('div', { class: 'done', text: 'A supervisor PIN is set. Sign-off, bird count changes, flock details and the staff list ask for it.' }) : h('div', { class: 'banner', text: 'No supervisor PIN is set yet, so sign-off and bird count changes are open to everyone. The supervisor should set one here.' }),
+        h('div', { class: 'row' }, [field(pinSet() ? 'New PIN (4 to 8 digits)' : 'PIN (4 to 8 digits)', p1), field('Type it again', p2)]), pm,
+        h('button', { type: 'button', class: 'btn', text: pinSet() ? 'Change PIN (asks for the current one)' : 'Set PIN', onclick: function () { if (!/^\d{4,8}$/.test(p1.value)) { pm.className = 'msg bad'; pm.textContent = 'Use 4 to 8 digits.'; return; } if (p1.value !== p2.value) { pm.className = 'msg bad'; pm.textContent = 'The two entries do not match.'; return; } var nv = p1.value; PIN_OK_UNTIL = 0; withPin(function () { setF('cfg|pin', 'h', pinHash(nv)); PIN_OK_UNTIL = 0; route(); }); } })]); })(),
+    h('div', { class: 'card' }, [h('h2', { text: 'Sync with the farm record' }), h('p', { class: 'note', text: 'Entries are always saved on this device first. When a sync address is set and there is a signal, they are copied to the farm Google Sheet and other devices pick them up.' }),
+      field('Sync address', url), field('Farm passcode', pass), sm,
+      h('div', { class: 'bar' }, [h('button', { type: 'button', class: 'btn pri', text: 'Save and sync now', onclick: function () { ls('url', url.value.trim() || null); ls('pass', pass.value); sm.className = 'note'; sm.textContent = 'Syncing...'; paintSync(); syncNow(function (ok) { sm.className = ok ? 'done' : 'msg bad'; sm.textContent = ok ? 'Synced.' : (url.value.trim() ? 'Could not sync: ' + (SYNC.err || 'no connection') : 'No sync address set. Entries stay on this device.'); }); } })])]),
+    h('div', { class: 'card' }, [h('h2', { text: 'Backup' }), h('p', { class: 'note', text: 'A backup file holds every record on this device. Restoring merges; it never deletes.' }),
+      h('div', { class: 'bar' }, [h('button', { type: 'button', class: 'btn', text: 'Download backup file', onclick: function () { download('daybreak-backup-' + today() + '.json', JSON.stringify(Object.keys(db.recs).map(function (k) { return db.recs[k]; })), 'application/json'); } }),
+        (function () { var fi = h('input', { id: 'su_restore', type: 'file', accept: '.json,application/json', class: 'in' }); fi.addEventListener('change', function () { if (!fi.files || !fi.files[0]) return; var rd = new FileReader(); rd.onload = function () { try { var arr = JSON.parse(rd.result), c = 0, q = [], qo = []; arr.forEach(function (r) { if (!r || !r.k || !r.d) return; var t = r.t || {}; if (!r.t) for (var f in r.d) t[f] = 1; var m = E.merge(db.rec(r.k), { k: r.k, d: r.d, t: t, by: r.by || '' }); if (m.changed !== false) { delete m.changed; db.put(m); q.push(m); qo.push({ k: m.k, f: Object.keys(m.t) }); OUTBOX[m.k] = qo[qo.length - 1]; c++; } }); idbBulk('recs', q); idbBulk('outbox', qo); paintSync(); scheduleSync(); modal([h('h2', { text: 'Restore finished' }), h('p', { text: c + ' records added or updated. They will be copied to the farm record at the next sync.' }), h('button', { type: 'button', class: 'btn pri', text: 'OK', onclick: function () { modal(null); route(); } })]); } catch (e) { modal([h('h2', { text: 'That file could not be read' }), h('p', { text: 'Choose a backup file made by this app.' }), h('button', { type: 'button', class: 'btn', text: 'OK', onclick: function () { modal(null); } })]); } }; rd.readAsText(fi.files[0]); }); return field('Restore from a backup or history file', fi); })()])])
+  ]);
+}
+
+/* ---------- router and start-up */
+var NAV = [['today', 'Rounds', 'Today'], ['eggs', 'Eggs', 'Collect'], ['dash', 'Dash', 'Barns'], ['reports', 'Reports', 'Monthly'], ['more', 'More', 'Tools']];
+function route() {
+  var act = document.activeElement; if (act && act !== document.body && act.blur) act.blur();
+  if (!READY) return;
+  var name = (location.hash || '#today').slice(1), main = $('main'), top = name.split('-')[0];
+  LIVE = []; clear(main);
+  if (name.indexOf('st-') === 0) viewStation(main, name.slice(3));
+  else if (name === 'eggs') viewEggs(main);
+  else if (name === 'dash') viewDash(main);
+  else if (name === 'reports') viewReports(main);
+  else if (name === 'flocks') viewFlocks(main);
+  else if (name === 'maint') viewMaint(main);
+  else if (name === 'sizing') viewSizing(main);
+  else if (name === 'setup') viewSetup(main);
+  else if (name === 'more') viewMore(main);
+  else { top = 'today'; viewToday(main); }
+  var on = top === 'st' ? 'today' : (['flocks', 'maint', 'sizing', 'setup'].indexOf(top) >= 0 ? 'more' : top);
+  Array.prototype.forEach.call($('nav').children, function (a) { a.className = a.getAttribute('data-n') === on ? 'on' : ''; });
+  if (!STORE_OK && !$('nostore')) main.insertBefore(h('div', { id: 'nostore', class: 'banner bad', text: 'Demo mode: this window cannot keep data on the device. Do not use it for real entries.' }), main.firstChild);
+}
+function start() {
+  $('logo').src = LOGO;
+  NAV.forEach(function (n) { $('nav').appendChild(h('a', { href: '#' + n[0], 'data-n': n[0] }, [h('b', { text: n[1] }), n[2]])); });
+  $('who').textContent = S.user || 'Who?';
+  $('who').addEventListener('click', function () { pickUser(route); });
+  $('sync').addEventListener('click', function () { location.hash = '#setup'; syncNow(); });
+  window.addEventListener('hashchange', function () { window.scrollTo(0, 0); route(); });
+  window.addEventListener('online', function () { syncNow(); });
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { var a = document.activeElement; if (!(a && a.matches && a.matches('input,textarea,select'))) rollDay(); syncNow(); } });
+  setInterval(function () { var a = document.activeElement; if (!(a && a.matches && a.matches('input,textarea,select'))) rollDay(); syncNow(); }, 60000);
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
+  idbOpen(function () {
+    idbAll('recs', function (rows) {
+      rows.forEach(function (r) { db.put(r); });
+      var seed = window.DBK_SEED || [];
+      if (!rows.length && seed.length) { var ins = seed.map(function (s) { var t = {}; for (var f in s.d) t[f] = 1; return { k: s.k, d: s.d, t: t, by: '' }; }); ins.forEach(function (r) { db.put(r); }); idbBulk('recs', ins); }
+      idbAll('outbox', function (o) { o.forEach(function (x) { OUTBOX[x.k] = x; }); READY = true; paintSync(); route(); if (!S.user) pickUser(route); syncNow(); });
+    });
+  });
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !window.DBK_PREVIEW) { try { navigator.serviceWorker.register('sw.js'); } catch (e) { } }
+}
+start();
+
+</script>
+</body>
+</html>
