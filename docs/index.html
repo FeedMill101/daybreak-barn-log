@@ -561,9 +561,12 @@ var STANDARDS = {
   'brown-free': { name: 'Lohmann Brown-Lite, free run', from: 19, v: [9.3,36.7,54.7,72.2,82.6,88.2,91.4,93.2,94.3,94.9,95.2,95.4,95.6,95.7,95.8,95.8,95.7,95.6,95.4,95.2,95.1,94.9,94.7,94.5,94.3,94.1,93.8,93.6,93.3,93,92.7,92.3,92,91.7,91.3,91,90.6,90.2,89.9,89.5,89.1,88.8,88.4,88,87.6,87.2,86.8,86.5,86.1,85.6,85.2,84.7,84.3,83.7,83.2,82.7,82.2,81.7,81.1,80.6,80,79.5,78.9,78.3,77.8,77.2,76.6,76,75.3,74.7,74.1,73.5] }
 };
 
-/* Daybreak Barn Log - app core. VERSION MARKER: APP 1.1.0 */
+/* Daybreak Barn Log - app core. VERSION MARKER: APP 1.2.0 */
 'use strict';
-var APP_VERSION = '1.1.0';
+var APP_VERSION = '1.2.0';
+/* The farm's sync address is built into the page so a new device needs only the farm passcode.
+   The address is not a secret: every request is refused without the passcode. Blank in the review copy. */
+var DEFAULT_SYNC = window.DBK_PREVIEW ? '' : 'https://script.google.com/macros/s/AKfycby3MTW2ugZWMLiCpNJP7MSeAucAUVM0fhbGA-8wstCgb4F9JDouriE3Fhl2VRmRlec/exec';
 var E = window.DBE, db = E.makeDb();
 
 /* ---------- farm configuration (from the Flock Planner tab, 2026-11-20).
@@ -765,11 +768,11 @@ function setMany(k, obj) { for (var f in obj) setF(k, f, obj[f]); }
 
 /* ---------- sync: push the outbox, pull everyone else's changes. Safe to run any time, any number of times. */
 var SYNC = { busy: false, err: '', last: ls('lastSync') || '', timer: null };
-function syncUrl() { return ls('url') || ''; }
+function syncUrl() { return ls('url') || DEFAULT_SYNC || ''; }
 function scheduleSync() { if (!syncUrl()) return; clearTimeout(SYNC.timer); SYNC.timer = setTimeout(syncNow, 2500); }
 function syncNow(cb) {
   var url = syncUrl();
-  if (!url || SYNC.busy || !READY) { if (cb) cb(false); return; }
+  if (!url || SYNC.busy || !READY || !ls('pass')) { if (cb) cb(false); return; }
   if (navigator.onLine === false) { SYNC.err = 'offline'; paintSync(); if (cb) cb(false); return; }
   var keys = Object.keys(OUTBOX).filter(function (k) { return !!db.rec(k); }).sort(function (a, b) { return (OUTBOX[a].fail || 0) - (OUTBOX[b].fail || 0); }).slice(0, 400);
   var sent = {}, ops = keys.map(function (k) {
@@ -811,7 +814,7 @@ function deviceId() { var d = ls('device'); if (!d) { d = 'd' + Date.now().toStr
 function paintSync() {
   var el = $('sync'); if (!el) return;
   var n = Object.keys(OUTBOX).length, cls = '', txt;
-  if (!syncUrl()) { txt = STORE_OK ? 'On device' : 'NOT SAVING'; cls = STORE_OK ? 'off' : 'err'; }
+  if (!syncUrl() || !ls('pass')) { txt = STORE_OK ? (syncUrl() ? 'Not connected' : 'On device') : 'NOT SAVING'; cls = STORE_OK ? 'off' : 'err'; }
   else if (SYNC.busy) { txt = SYNC.more ? 'Loading history...' : 'Syncing...'; cls = 'pend'; }
   else if (n) { txt = n + ' to sync'; cls = 'pend'; }
   else if (SYNC.err && SYNC.err !== 'offline') { txt = 'Sync problem'; cls = 'err'; }
@@ -853,6 +856,29 @@ function withPin(then) {
   modal([h('h2', { text: 'Supervisor PIN' }), h('p', { class: 'note', text: 'Sign-off and bird count changes need the supervisor PIN. It stays unlocked on this device for 10 minutes.' }), field('PIN', inp), msg,
     h('div', { class: 'bar' }, [h('button', { type: 'button', class: 'btn pri', text: 'Unlock', onclick: go }), h('button', { type: 'button', class: 'btn ghost', text: 'Cancel', onclick: function () { modal(null); } })])]);
   inp.focus();
+}
+/* First open on a new device: ask for the farm passcode once, check it against the farm record,
+   then go on to "Who is entering?". Skipping keeps entries on the device until it is connected later. */
+function askPass(then) {
+  var inp = h('input', { id: 'join_pass', class: 'in big', type: 'password', autocomplete: 'off', autocapitalize: 'off' }), msg = h('div'), busy = false;
+  function go() {
+    if (busy || !inp.value.trim()) return;
+    busy = true; msg.className = 'note'; msg.textContent = 'Checking...';
+    ls('pass', inp.value.trim());
+    syncNow(function (ok) {
+      busy = false;
+      if (ok) { modal(null); if (then) then(); return; }
+      var wrong = /passcode/i.test(SYNC.err || '');
+      if (wrong) ls('pass', null);
+      msg.className = 'msg bad';
+      msg.textContent = wrong ? 'That is not the farm passcode. Check it with the supervisor.' : 'No connection right now. The passcode is kept and will be checked when there is a signal. Tap Continue.';
+      if (!wrong) { paintSync(); go2.hidden = false; }
+    });
+  }
+  var go2 = h('button', { type: 'button', class: 'btn', text: 'Continue', hidden: true, onclick: function () { modal(null); if (then) then(); } });
+  inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+  modal([h('h2', { text: 'Connect this device' }), h('p', { class: 'note', text: 'Type the farm passcode once. After that this device stays connected to the farm record.' }), field('Farm passcode', inp), msg,
+    h('div', { class: 'bar' }, [h('button', { type: 'button', class: 'btn pri', text: 'Connect', onclick: go }), go2, h('button', { type: 'button', class: 'btn ghost', text: 'Skip for now', onclick: function () { modal(null); if (then) then(); } })])]);
 }
 function needUser() {
   if (rollDay()) { modal([h('h2', { text: 'A new day has started' }), h('p', { text: 'This page was still showing yesterday. It now shows ' + niceDate(S.date) + '. Nothing was written - please enter that again.' }), h('button', { type: 'button', class: 'btn pri', text: 'OK', onclick: function () { modal(null); } })]); return false; }
@@ -1580,7 +1606,7 @@ function start() {
       rows.forEach(function (r) { db.put(r); });
       var seed = window.DBK_SEED || [];
       if (!rows.length && seed.length) { var ins = seed.map(function (s) { var t = {}; for (var f in s.d) t[f] = 1; return { k: s.k, d: s.d, t: t, by: '' }; }); ins.forEach(function (r) { db.put(r); }); idbBulk('recs', ins); }
-      idbAll('outbox', function (o) { o.forEach(function (x) { OUTBOX[x.k] = x; }); READY = true; paintSync(); route(); if (!S.user) pickUser(route); syncNow(); });
+      idbAll('outbox', function (o) { o.forEach(function (x) { OUTBOX[x.k] = x; }); READY = true; paintSync(); route(); if (syncUrl() && !ls('pass')) askPass(function () { route(); if (!S.user) pickUser(route); }); else if (!S.user) pickUser(route); syncNow(); });
     });
   });
   if ('serviceWorker' in navigator && location.protocol === 'https:' && !window.DBK_PREVIEW) { try { navigator.serviceWorker.register('sw.js'); } catch (e) { } }
