@@ -1,8 +1,8 @@
-/* Daybreak Barn Log service worker. VERSION MARKER: SW 1.2.0
+/* Daybreak Barn Log service worker. VERSION MARKER: SW 1.3.0
    Keeps the app shell on the device so it opens at once with no signal or a weak one;
    a newer copy is fetched behind the scenes and used the next time the app is opened. Data never passes through here:
    records live in IndexedDB and sync requests always go straight to the network. */
-var CACHE = 'daybreak-barnlog-1.2.0';
+var CACHE = 'daybreak-barnlog-1.3.0';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));

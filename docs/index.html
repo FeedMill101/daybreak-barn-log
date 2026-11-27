@@ -171,7 +171,7 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
 
 </script>
 <script>
-/* Daybreak Barn Log - calculation engine. VERSION MARKER: ENGINE 1.1.0
+/* Daybreak Barn Log - calculation engine. VERSION MARKER: ENGINE 1.2.0
    Pure functions only: no DOM, no storage, no clock. Shared by the app and the tests.
    Rule carried through every function: blank is never zero. A missing reading,
    count or entry yields null, and null never enters a total or an average. */
@@ -180,7 +180,7 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
   else root.DBE = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var ENGINE_VERSION = '1.1.0';
+  var ENGINE_VERSION = '1.2.0';
 
   // ---------- dates (plain YYYY-MM-DD strings, no timezone maths)
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -457,6 +457,31 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
     var mm = isNum(d.a_tn) && isNum(d.p_tx), fl = (isNum(d.a_fl) ? 1 : 0) + (isNum(d.p_fl) ? 1 : 0);
     return { minMax: mm, flies: fl, ok: mm && fl === 2 };
   }
+  /* One round (AM or PM) at one station, for the audit record. rec is the whole stored record
+     { d: fields, t: when each field was last entered (ms) }. A round is DONE only when water supply,
+     feeders, hen health, temperature and initials are all recorded. at = when the last of those was
+     entered; it is null for history brought over from the old sheet, where that was never kept. */
+  function roundSlot(rec, s) {
+    var d = rec && rec.d, sl = chkSlot(d, s);
+    if (!sl) return null;
+    var keys = ['_w', '_f', '_h', '_t', '_by'], at = 0, t = rec.t || {};
+    for (var i = 0; i < keys.length; i++) if (isNum(t[s + keys[i]]) && t[s + keys[i]] > at) at = t[s + keys[i]];
+    return { done: sl.complete, tm: d[s + '_tm'] || '', by: d[s + '_by'] || '', temp: sl.temp, issues: sl.issues, at: at > 1 ? at : null };
+  }
+  /* Both rounds for every day of a month up to and including upTo. A day the station held no birds
+     is 'empty' and is not expected; a day with no bird count on file IS expected. */
+  function roundsMonth(db, station, ym, lines, upTo) {
+    var ds = monthDates(ym), out = { days: [], expected: 0, am: 0, pm: 0, both: 0, missed: [] };
+    for (var i = 0; i < ds.length; i++) {
+      if (upTo && ds[i] > upTo) break;
+      var rec = db.rec(key('chk', station, ds[i])), a = roundSlot(rec, 'a'), p = roundSlot(rec, 'p');
+      var birds = birdsOf(db, lines, ds[i]), empty = birds === 0 && !a && !p;
+      var status = empty ? 'empty' : (a && a.done && p && p.done) ? 'both' : (a && a.done) ? 'am-only' : (p && p.done) ? 'pm-only' : (a || p) ? 'incomplete' : 'missed';
+      if (!empty) { out.expected++; if (a && a.done) out.am++; if (p && p.done) out.pm++; if (status === 'both') out.both++; else out.missed.push(ds[i]); }
+      out.days.push({ date: ds[i], am: a, pm: p, status: status, audit: chkAudit(rec && rec.d) });
+    }
+    return out;
+  }
   function chkMonth(db, station, ym) {
     var ds = monthDates(ym), t = { am: 0, pm: 0, issues: 0, tSum: 0, tN: 0, tMin: null, tMax: null, wild: 0, leakDays: 0, minMaxDays: 0, flyChecks: 0, auditDays: 0 };
     for (var i = 0; i < ds.length; i++) {
@@ -543,7 +568,7 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
     deaths: deaths, ledger: ledger, countAt: countAt, countStart: countStart, birdsOf: birdsOf, mortMonth: mortMonth,
     waterDay: waterDay, waterMonth: waterMonth, waterGuard: waterGuard,
     feedDay: feedDay, feedMonth: feedMonth, eggDay: eggDay, eggMonth: eggMonth, eggScope: eggScope, eggScopeMonth: eggScopeMonth, stdAt: stdAt, chkAudit: chkAudit, feedPerDozen: feedPerDozen,
-    chkSlot: chkSlot, chkMonth: chkMonth, ageWeeks: ageWeeks, merge: merge
+    chkSlot: chkSlot, chkMonth: chkMonth, roundSlot: roundSlot, roundsMonth: roundsMonth, ageWeeks: ageWeeks, merge: merge
   };
 });
 
@@ -561,9 +586,9 @@ var STANDARDS = {
   'brown-free': { name: 'Lohmann Brown-Lite, free run', from: 19, v: [9.3,36.7,54.7,72.2,82.6,88.2,91.4,93.2,94.3,94.9,95.2,95.4,95.6,95.7,95.8,95.8,95.7,95.6,95.4,95.2,95.1,94.9,94.7,94.5,94.3,94.1,93.8,93.6,93.3,93,92.7,92.3,92,91.7,91.3,91,90.6,90.2,89.9,89.5,89.1,88.8,88.4,88,87.6,87.2,86.8,86.5,86.1,85.6,85.2,84.7,84.3,83.7,83.2,82.7,82.2,81.7,81.1,80.6,80,79.5,78.9,78.3,77.8,77.2,76.6,76,75.3,74.7,74.1,73.5] }
 };
 
-/* Daybreak Barn Log - app core. VERSION MARKER: APP 1.2.0 */
+/* Daybreak Barn Log - app core. VERSION MARKER: APP 1.3.0 */
 'use strict';
-var APP_VERSION = '1.2.0';
+var APP_VERSION = '1.3.0';
 /* The farm's sync address is built into the page so a new device needs only the farm passcode.
    The address is not a secret: every request is refused without the passcode. Blank in the review copy. */
 var DEFAULT_SYNC = window.DBK_PREVIEW ? '' : 'https://script.google.com/macros/s/AKfycby3MTW2ugZWMLiCpNJP7MSeAucAUVM0fhbGA-8wstCgb4F9JDouriE3Fhl2VRmRlec/exec';
@@ -1390,8 +1415,43 @@ function reportStation(box, ym, st) {
     var sz = db.dates('size', L).filter(function (d) { return d.slice(0, 7) === ym; });
   });
 }
+/* AUDIT REPORT: proof that the morning and the afternoon round were done, every station, every day.
+   "Recorded" is when the round was actually typed in, taken from the record itself and not editable;
+   a round typed in on a later day than the one it is filed under is marked "entered later". */
+function localStamp(ms) { var d = new Date(ms); return { date: E.ymd(d.getFullYear(), d.getMonth() + 1, d.getDate()), text: MONTHS[d.getMonth()].slice(0, 3) + ' ' + d.getDate() + ' ' + E.pad(d.getHours()) + ':' + E.pad(d.getMinutes()) }; }
+function recordedCell(slot, date) {
+  if (!slot) return '';
+  if (slot.at === null) return 'old sheet';
+  var st = localStamp(slot.at);
+  return st.date > date ? { v: st.text + ' - entered later', flag: true } : st.text;
+}
+var ROUND_STATUS = { both: 'Both rounds done', 'am-only': 'PM ROUND MISSING', 'pm-only': 'AM ROUND MISSING', incomplete: 'STARTED, NOT FINISHED', missed: 'NO ROUNDS RECORDED', empty: 'Empty - no birds' };
+function reportRounds(box, ym) {
+  var upTo = today(), sum = [], T = { e: 0, a: 0, p: 0, b: 0 }, all = [];
+  CFG.stations.forEach(function (st) {
+    var r = E.roundsMonth(db, st.id, ym, st.lines, upTo); all.push([st, r]);
+    T.e += r.expected; T.a += r.am; T.p += r.pm; T.b += r.both;
+    var late = 0; r.days.forEach(function (x) { ['am', 'pm'].forEach(function (s) { if (x[s] && x[s].at !== null && localStamp(x[s].at).date > x.date) late++; }); });
+    sum.push([st.name, r.expected, { v: r.am + ' of ' + r.expected, flag: r.am < r.expected }, { v: r.pm + ' of ' + r.expected, flag: r.pm < r.expected }, { v: r.both + ' of ' + r.expected, flag: r.both < r.expected }, r.expected ? pct(r.both / r.expected, 0) : '-', late || '', { v: r.missed.map(function (d) { return +d.slice(8); }).join(', '), wrap: true, flag: r.missed.length > 0 }]);
+  });
+  sum.push({ tot: true, c: ['All stations', T.e, T.a + ' of ' + T.e, T.p + ' of ' + T.e, T.b + ' of ' + T.e, T.e ? pct(T.b / T.e, 0) : '-', '', ''] });
+  box.appendChild(h('div', { class: 'tiles' }, [tile('Days with both rounds', T.b + ' of ' + T.e, T.e ? pct(T.b / T.e, 0) + ' of station-days' : ''), tile('Morning rounds done', T.a + ' of ' + T.e, ''), tile('Afternoon rounds done', T.p + ' of ' + T.e, ''), tile('Period', niceMonth(ym), 'days 1 to ' + (all[0][1].days.length))]));
+  sect(box, 'Summary by station', ['Station', '#Days with birds', '#Morning rounds', '#Afternoon rounds', '#Both rounds', '#Complete', '#Rounds entered later', 'Days short of both rounds'], sum);
+  box.appendChild(h('p', { class: 'note', text: 'A round counts as done when water supply, feeders, health of hens, temperature and initials are all recorded for that station. "Time" is the time of the check as written by the person. "Recorded" is when it was typed into the Barn Log, kept automatically. Days a station held no birds are not counted.' }));
+  all.forEach(function (x) {
+    var st = x[0], r = x[1];
+    var rows = r.days.map(function (d) {
+      var a = d.am, p = d.pm, raw = db.get('chk', st.id, d.date) || {};
+      return [niceDate(d.date), a ? a.tm : '', a ? a.by : '', a && a.temp !== null ? fmt(a.temp, 1) : '', E.isNum(raw.a_tn) ? fmt(raw.a_tn, 1) : '', E.isNum(raw.a_fl) ? FLY[raw.a_fl] : '', recordedCell(a, d.date),
+        p ? p.tm : '', p ? p.by : '', p && p.temp !== null ? fmt(p.temp, 1) : '', E.isNum(raw.p_tx) ? fmt(raw.p_tx, 1) : '', E.isNum(raw.p_fl) ? FLY[raw.p_fl] : '', recordedCell(p, d.date),
+        { v: ROUND_STATUS[d.status], flag: d.status !== 'both' && d.status !== 'empty' }];
+    });
+    rows.push({ tot: true, c: ['Month', '', r.am + ' of ' + r.expected, '', '', '', '', '', r.pm + ' of ' + r.expected, '', '', '', '', r.both + ' of ' + r.expected + ' days with both rounds'] });
+    sect(box, st.name + ' (' + st.sub + '): morning and afternoon rounds', ['Date', 'AM time', 'AM by', '#AM temp C', '#Min C', 'AM flies', 'AM recorded', 'PM time', 'PM by', '#PM temp C', '#Max C', 'PM flies', 'PM recorded', 'Status'], rows, true);
+  });
+}
 function viewReports(main) {
-  var sel = h('select', { id: 'rpt_scope', class: 'in', onchange: function () { S.rptScope = sel.value; route(); } }, [h('option', { value: 'farm', text: 'Whole farm summary' })].concat(CFG.stations.map(function (s) { return h('option', { value: s.id, text: s.name + ' - full monthly record' }); })));
+  var sel = h('select', { id: 'rpt_scope', class: 'in', onchange: function () { S.rptScope = sel.value; route(); } }, [h('option', { value: 'farm', text: 'Whole farm summary' }), h('option', { value: 'rounds', text: 'Audit record: morning and afternoon rounds, all stations' })].concat(CFG.stations.map(function (s) { return h('option', { value: s.id, text: s.name + ' - full monthly record' }); })));
   sel.value = S.rptScope;
   add(main, h('div', { class: 'card noprint' }, [
     h('h1', { text: 'Monthly reports' }),
@@ -1406,9 +1466,10 @@ function viewReports(main) {
   ]));
   RPT_ROWS = [];
   var st = station(S.rptScope), box = h('div', { class: 'card rpt' });
-  box.appendChild(h('div', { class: 'rpt-head' }, [h('div', { class: 'logo' }, h('img', { src: LOGO, alt: 'Daybreak Farms' })), h('div', null, [h('h1', { text: (st ? st.name + ' monthly record' : 'Farm monthly summary') + ' - ' + niceMonth(S.rptMonth) }), h('div', { class: 'note', text: CFG.farm + (st ? ' - ' + st.sub : '') + ' - printed ' + today() + (S.user ? ' by ' + S.user : '') })])]));
-  if (st) reportStation(box, S.rptMonth, st); else reportFarm(box, S.rptMonth);
-  box.appendChild(h('div', { class: 'sig' }, [h('span', { text: 'Reviewed by' }), h('span', { text: 'Date' })]));
+  box.appendChild(h('div', { class: 'rpt-head' }, [h('div', { class: 'logo' }, h('img', { src: LOGO, alt: 'Daybreak Farms' })), h('div', null, [h('h1', { text: (st ? st.name + ' monthly record' : S.rptScope === 'rounds' ? 'Daily rounds audit record' : 'Farm monthly summary') + ' - ' + niceMonth(S.rptMonth) }), h('div', { class: 'note', text: CFG.farm + (st ? ' - ' + st.sub : '') + ' - printed ' + today() + (S.user ? ' by ' + S.user : '') })])]));
+  if (st) reportStation(box, S.rptMonth, st); else if (S.rptScope === 'rounds') reportRounds(box, S.rptMonth); else reportFarm(box, S.rptMonth);
+  try { document.title = 'Daybreak ' + (st ? st.name + ' record' : S.rptScope === 'rounds' ? 'rounds audit record' : 'farm summary') + ' ' + S.rptMonth; } catch (e) { }
+  box.appendChild(h('div', { class: 'sig' }, [h('span', { text: 'Reviewed by (name)' }), h('span', { text: 'Signature' }), h('span', { text: 'Date' })]));
   main.appendChild(box);
 }
 function download(name, text, type) {
@@ -1576,6 +1637,7 @@ function route() {
   if (!READY) return;
   var name = (location.hash || '#today').slice(1), main = $('main'), top = name.split('-')[0];
   LIVE = []; clear(main);
+  try { document.title = 'Daybreak Barn Log'; } catch (e) { }
   if (name.indexOf('st-') === 0) viewStation(main, name.slice(3));
   else if (name === 'eggs') viewEggs(main);
   else if (name === 'dash') viewDash(main);
