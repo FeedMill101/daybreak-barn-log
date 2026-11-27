@@ -171,7 +171,7 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
 
 </script>
 <script>
-/* Daybreak Barn Log - calculation engine. VERSION MARKER: ENGINE 1.2.0
+/* Daybreak Barn Log - calculation engine. VERSION MARKER: ENGINE 1.3.0
    Pure functions only: no DOM, no storage, no clock. Shared by the app and the tests.
    Rule carried through every function: blank is never zero. A missing reading,
    count or entry yields null, and null never enters a total or an average. */
@@ -180,7 +180,7 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
   else root.DBE = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var ENGINE_VERSION = '1.2.0';
+  var ENGINE_VERSION = '1.3.0';
 
   // ---------- dates (plain YYYY-MM-DD strings, no timezone maths)
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -458,9 +458,10 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
     return { minMax: mm, flies: fl, ok: mm && fl === 2 };
   }
   /* One round (AM or PM) at one station, for the audit record. rec is the whole stored record
-     { d: fields, t: when each field was last entered (ms) }. A round is DONE only when water supply,
-     feeders, hen health, temperature and initials are all recorded. at = when the last of those was
-     entered; it is null for history brought over from the old sheet, where that was never kept. */
+     { d: fields, t: when each field was last entered (ms) }. The CHECKLIST part of a round is done
+     only when water supply, feeders, hen health, temperature and initials are all recorded. at = when
+     the last of those was entered; it is null for history brought over from the old sheet, where that
+     was never kept. */
   function roundSlot(rec, s) {
     var d = rec && rec.d, sl = chkSlot(d, s);
     if (!sl) return null;
@@ -468,17 +469,64 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
     for (var i = 0; i < keys.length; i++) if (isNum(t[s + keys[i]]) && t[s + keys[i]] > at) at = t[s + keys[i]];
     return { done: sl.complete, tm: d[s + '_tm'] || '', by: d[s + '_by'] || '', temp: sl.temp, issues: sl.issues, at: at > 1 ? at : null };
   }
-  /* Both rounds for every day of a month up to and including upTo. A day the station held no birds
-     is 'empty' and is not expected; a day with no bird count on file IS expected. */
+  /* The mortality check of one round (s = 'a' or 'p') across the lines of a station. A line is
+     checked when a number - a zero counts, a blank does not - is on file for that round.
+     A line needs the AM check when it held birds at the end of the day before AND at the start of
+     this day (so not on the morning of a placement, nor after a depopulation); it needs the PM check
+     when it holds birds at the end of this day. A line with no bird count on file always needs both.
+     Numbers on file for a round always count, whatever the bird count says. */
+  var MORT_SLOT = { a: ['wa', 'wac', 'ba', 'bac'], p: ['wp', 'wpc', 'bp', 'bpc'] };
+  function holds(c) { return !c || c.w > 0 || c.b > 0; }
+  function mortSlot(db, lines, date, s) {
+    var out = { need: 0, got: 0, ok: true, missing: [], found: 0 }, f = MORT_SLOT[s];
+    for (var i = 0; i < lines.length; i++) {
+      var d = db.get('mort', lines[i], date), any = false;
+      for (var j = 0; j < f.length; j++) if (d && isNum(d[f[j]])) { any = true; out.found += d[f[j]]; }
+      var here = s === 'a' ? (holds(countAt(db, lines[i], addDays(date, -1))) && holds(countStart(db, lines[i], date))) : holds(countAt(db, lines[i], date));
+      if (!here && !any) continue;
+      out.need++;
+      if (any) out.got++; else out.missing.push(lines[i]);
+    }
+    out.ok = out.got === out.need;
+    return out;
+  }
+  /* A time of day that does not fit the round it is written against: a morning check timed at noon
+     or later (21:00 typed for 9:00), or an afternoon check timed before noon. Returns 'late',
+     'early' or '' - a blank or unreadable time is never flagged. */
+  function timeOdd(s, tm) {
+    var m = minutes(tm);
+    if (m === null) return '';
+    if (s === 'a') return m >= 720 ? 'late' : '';
+    return m < 720 ? 'early' : '';
+  }
+  /* Both rounds for every day of a month up to and including upTo. For the audit a round is the
+     checklist AND the mortality check of every line that needs one (see mortSlot), and the day also
+     needs the water meter reading. A round is EXPECTED only when at least one line needs its
+     mortality check, so the morning of a placement and the afternoon of a depopulation are not
+     expected; a day with neither round expected is 'empty'. A station with no bird count on file IS
+     expected. Entries made on a day that was not expected are still carried in am / pm. gaps names
+     exactly what is missing. */
   function roundsMonth(db, station, ym, lines, upTo) {
-    var ds = monthDates(ym), out = { days: [], expected: 0, am: 0, pm: 0, both: 0, missed: [] };
+    var ds = monthDates(ym), out = { days: [], expected: 0, am: 0, pm: 0, water: 0, both: 0, missed: [] };
     for (var i = 0; i < ds.length; i++) {
       if (upTo && ds[i] > upTo) break;
       var rec = db.rec(key('chk', station, ds[i])), a = roundSlot(rec, 'a'), p = roundSlot(rec, 'p');
-      var birds = birdsOf(db, lines, ds[i]), empty = birds === 0 && !a && !p;
-      var status = empty ? 'empty' : (a && a.done && p && p.done) ? 'both' : (a && a.done) ? 'am-only' : (p && p.done) ? 'pm-only' : (a || p) ? 'incomplete' : 'missed';
-      if (!empty) { out.expected++; if (a && a.done) out.am++; if (p && p.done) out.pm++; if (status === 'both') out.both++; else out.missed.push(ds[i]); }
-      out.days.push({ date: ds[i], am: a, pm: p, status: status, audit: chkAudit(rec && rec.d) });
+      var ma = mortSlot(db, lines, ds[i], 'a'), mp = mortSlot(db, lines, ds[i], 'p');
+      var w = db.get('water', station, ds[i]), wr = (w && isNum(w.r)) ? w.r : null;
+      var amExp = ma.need > 0, pmExp = mp.need > 0, empty = !amExp && !pmExp;
+      var amOk = !amExp || !!(a && a.done && ma.ok), pmOk = !pmExp || !!(p && p.done && mp.ok), gaps = [];
+      if (amExp && !(a && a.done)) gaps.push('AM checklist');
+      if (!ma.ok) gaps.push('AM mortality ' + ma.missing.join(', '));
+      if (pmExp && !(p && p.done)) gaps.push('PM checklist');
+      if (!mp.ok) gaps.push('PM mortality ' + mp.missing.join(', '));
+      if (wr === null) gaps.push('Water reading');
+      var some = !!(a || p || ma.got || mp.got || wr !== null);
+      var status = empty ? 'empty' : (amOk && pmOk && wr !== null) ? 'both' : !some ? 'missed' : (amOk && pmOk) ? 'no-water' : amOk ? 'am-only' : pmOk ? 'pm-only' : 'incomplete';
+      if (!empty) {
+        out.expected++; if (amOk) out.am++; if (pmOk) out.pm++; if (wr !== null) out.water++;
+        if (status === 'both') out.both++; else out.missed.push(ds[i]);
+      }
+      out.days.push({ date: ds[i], am: a, pm: p, amExp: amExp, pmExp: pmExp, mortA: ma, mortP: mp, water: wr, gaps: empty ? [] : gaps, status: status, audit: chkAudit(rec && rec.d) });
     }
     return out;
   }
@@ -568,7 +616,7 @@ var LOGO = 'data:image/webp;base64,UklGRtYOAABXRUJQVlA4WAoAAAAwAAAAxwAARQAASUNDU
     deaths: deaths, ledger: ledger, countAt: countAt, countStart: countStart, birdsOf: birdsOf, mortMonth: mortMonth,
     waterDay: waterDay, waterMonth: waterMonth, waterGuard: waterGuard,
     feedDay: feedDay, feedMonth: feedMonth, eggDay: eggDay, eggMonth: eggMonth, eggScope: eggScope, eggScopeMonth: eggScopeMonth, stdAt: stdAt, chkAudit: chkAudit, feedPerDozen: feedPerDozen,
-    chkSlot: chkSlot, chkMonth: chkMonth, roundSlot: roundSlot, roundsMonth: roundsMonth, ageWeeks: ageWeeks, merge: merge
+    chkSlot: chkSlot, chkMonth: chkMonth, roundSlot: roundSlot, mortSlot: mortSlot, timeOdd: timeOdd, roundsMonth: roundsMonth, ageWeeks: ageWeeks, merge: merge
   };
 });
 
@@ -586,9 +634,9 @@ var STANDARDS = {
   'brown-free': { name: 'Lohmann Brown-Lite, free run', from: 19, v: [9.3,36.7,54.7,72.2,82.6,88.2,91.4,93.2,94.3,94.9,95.2,95.4,95.6,95.7,95.8,95.8,95.7,95.6,95.4,95.2,95.1,94.9,94.7,94.5,94.3,94.1,93.8,93.6,93.3,93,92.7,92.3,92,91.7,91.3,91,90.6,90.2,89.9,89.5,89.1,88.8,88.4,88,87.6,87.2,86.8,86.5,86.1,85.6,85.2,84.7,84.3,83.7,83.2,82.7,82.2,81.7,81.1,80.6,80,79.5,78.9,78.3,77.8,77.2,76.6,76,75.3,74.7,74.1,73.5] }
 };
 
-/* Daybreak Barn Log - app core. VERSION MARKER: APP 1.3.0 */
+/* Daybreak Barn Log - app core. VERSION MARKER: APP 1.4.0 */
 'use strict';
-var APP_VERSION = '1.3.0';
+var APP_VERSION = '1.4.0';
 /* The farm's sync address is built into the page so a new device needs only the farm passcode.
    The address is not a secret: every request is refused without the passcode. Blank in the review copy. */
 var DEFAULT_SYNC = window.DBK_PREVIEW ? '' : 'https://script.google.com/macros/s/AKfycby3MTW2ugZWMLiCpNJP7MSeAucAUVM0fhbGA-8wstCgb4F9JDouriE3Fhl2VRmRlec/exec';
@@ -1040,7 +1088,9 @@ function chkCard(st, slot) {
   var k = E.key('chk', st.id, S.date), p = slot + '_', isAm = slot === 'a';
   function st1() { stamp(k, p + 'by', p + 'tm'); }
   var state = h('span', { class: 'sub' });
-  live(function () { var s = E.chkSlot(db.get('chk', st.id, S.date), slot); state.textContent = s ? (s.complete ? 'Complete - ' + (val(k, p + 'by') || '') + ' ' + (val(k, p + 'tm') || '') : 'Started - add the temperature') : 'Not started'; state.className = 'sub' + (s && s.complete ? ' done' : ''); });
+  live(function () { var s = E.chkSlot(db.get('chk', st.id, S.date), slot); var m = E.mortSlot(db, st.lines, S.date, slot), full = !!(s && s.complete && m.ok); state.textContent = s ? (s.complete ? (m.ok ? 'Complete - ' + (val(k, p + 'by') || '') + ' ' + (val(k, p + 'tm') || '') : 'Checklist done - record ' + (isAm ? 'AM' : 'PM') + ' mortality below to finish the round') : 'Started - not finished yet') : 'Not started'; state.className = 'sub' + (full ? ' done' : ''); });
+  var tmWarn = h('div', { id: fid(k, p + 'tmwarn') });
+  live(function () { var odd = E.timeOdd(slot, val(k, p + 'tm')); tmWarn.className = odd ? 'banner' : ''; tmWarn.textContent = odd ? ('Check the time: this is the ' + (isAm ? 'AM' : 'PM') + ' check but the time reads ' + val(k, p + 'tm') + (isAm ? ', which is afternoon or evening.' : ', which is morning.') + ' Fix it if it was mistyped.') : ''; });
   return h('div', { class: 'card' }, [
     h('div', { class: 'hd' }, [h('h2', { text: isAm ? 'AM check' : 'PM check' }), state]),
     h('button', { type: 'button', class: 'btn pri', text: 'All good - no leaks, feeders and hens good, no flies', onclick: function () {
@@ -1058,6 +1108,7 @@ function chkCard(st, slot) {
       field('Wild birds', numIn(k, p + 'wb', { max: 999 })),
       field('Time checked', textIn(k, p + 'tm', { type: 'time' }))
     ]),
+    tmWarn,
     field('Comments', textIn(k, p + 'c', { area: true, after: st1 }))
   ]);
 }
@@ -1100,6 +1151,7 @@ function mortCard(st) {
     var cols = [];
     if (!c0 || c0.w > 0 || val(k, 'wa') !== undefined || val(k, 'wp') !== undefined) cols.push(['w', 'White']);
     if (!c0 || c0.b > 0 || val(k, 'ba') !== undefined || val(k, 'bp') !== undefined) cols.push(['b', 'Brown']);
+    if (!cols.length) cols = [['w', 'White'], ['b', 'Brown']];
     cols.forEach(function (cc) {
       var x = cc[0];
       function am() { stamp(k, 'aby'); } function pm() { stamp(k, 'pby'); }
@@ -1425,29 +1477,33 @@ function recordedCell(slot, date) {
   var st = localStamp(slot.at);
   return st.date > date ? { v: st.text + ' - entered later', flag: true } : st.text;
 }
-var ROUND_STATUS = { both: 'Both rounds done', 'am-only': 'PM ROUND MISSING', 'pm-only': 'AM ROUND MISSING', incomplete: 'STARTED, NOT FINISHED', missed: 'NO ROUNDS RECORDED', empty: 'Empty - no birds' };
+var ROUND_STATUS = { both: 'Complete', missed: 'NOTHING RECORDED', empty: 'Empty - no birds' };
+function roundStatus(d) { return ROUND_STATUS[d.status] || ('MISSING: ' + d.gaps.join('; ')); }
+function mortCell(m) { return m.need === 0 ? '' : m.ok ? fmt(m.found) : { v: 'no', flag: true }; }
+function timeCell(s, slot) { return !slot ? '' : E.timeOdd(s, slot.tm) ? { v: slot.tm, flag: true } : slot.tm; }
 function reportRounds(box, ym) {
-  var upTo = today(), sum = [], T = { e: 0, a: 0, p: 0, b: 0 }, all = [];
+  var upTo = today(), sum = [], T = { e: 0, a: 0, p: 0, w: 0, b: 0 }, all = [];
   CFG.stations.forEach(function (st) {
     var r = E.roundsMonth(db, st.id, ym, st.lines, upTo); all.push([st, r]);
-    T.e += r.expected; T.a += r.am; T.p += r.pm; T.b += r.both;
+    T.e += r.expected; T.a += r.am; T.p += r.pm; T.w += r.water; T.b += r.both;
     var late = 0; r.days.forEach(function (x) { ['am', 'pm'].forEach(function (s) { if (x[s] && x[s].at !== null && localStamp(x[s].at).date > x.date) late++; }); });
-    sum.push([st.name, r.expected, { v: r.am + ' of ' + r.expected, flag: r.am < r.expected }, { v: r.pm + ' of ' + r.expected, flag: r.pm < r.expected }, { v: r.both + ' of ' + r.expected, flag: r.both < r.expected }, r.expected ? pct(r.both / r.expected, 0) : '-', late || '', { v: r.missed.map(function (d) { return +d.slice(8); }).join(', '), wrap: true, flag: r.missed.length > 0 }]);
+    sum.push([st.name, r.expected, { v: r.am + ' of ' + r.expected, flag: r.am < r.expected }, { v: r.pm + ' of ' + r.expected, flag: r.pm < r.expected }, { v: r.water + ' of ' + r.expected, flag: r.water < r.expected }, { v: r.both + ' of ' + r.expected, flag: r.both < r.expected }, r.expected ? pct(r.both / r.expected, 0) : '-', late || '', { v: r.missed.map(function (d) { return +d.slice(8); }).join(', '), wrap: true, flag: r.missed.length > 0 }]);
   });
-  sum.push({ tot: true, c: ['All stations', T.e, T.a + ' of ' + T.e, T.p + ' of ' + T.e, T.b + ' of ' + T.e, T.e ? pct(T.b / T.e, 0) : '-', '', ''] });
-  box.appendChild(h('div', { class: 'tiles' }, [tile('Days with both rounds', T.b + ' of ' + T.e, T.e ? pct(T.b / T.e, 0) + ' of station-days' : ''), tile('Morning rounds done', T.a + ' of ' + T.e, ''), tile('Afternoon rounds done', T.p + ' of ' + T.e, ''), tile('Period', niceMonth(ym), 'days 1 to ' + (all[0][1].days.length))]));
-  sect(box, 'Summary by station', ['Station', '#Days with birds', '#Morning rounds', '#Afternoon rounds', '#Both rounds', '#Complete', '#Rounds entered later', 'Days short of both rounds'], sum);
-  box.appendChild(h('p', { class: 'note', text: 'A round counts as done when water supply, feeders, health of hens, temperature and initials are all recorded for that station. "Time" is the time of the check as written by the person. "Recorded" is when it was typed into the Barn Log, kept automatically. Days a station held no birds are not counted.' }));
+  sum.push({ tot: true, c: ['All stations', T.e, T.a + ' of ' + T.e, T.p + ' of ' + T.e, T.w + ' of ' + T.e, T.b + ' of ' + T.e, T.e ? pct(T.b / T.e, 0) : '-', '', ''] });
+  box.appendChild(h('div', { class: 'tiles' }, [tile('Complete days', T.b + ' of ' + T.e, T.e ? pct(T.b / T.e, 0) + ' of station-days' : ''), tile('Morning rounds done', T.a + ' of ' + T.e, ''), tile('Afternoon rounds done', T.p + ' of ' + T.e, ''), tile('Water readings', T.w + ' of ' + T.e, ''), tile('Period', niceMonth(ym), all.length ? 'days 1 to ' + all[0][1].days.length : '')]));
+  sect(box, 'Summary by station', ['Station', '#Days with birds', '#Morning rounds', '#Afternoon rounds', '#Water readings', '#Complete days', '#Complete', '#Rounds entered later', 'Days not complete'], sum);
+  box.appendChild(h('p', { class: 'note', text: 'A round counts as done when the checklist (water supply, feeders, health of hens, temperature and initials) AND the mortality check of every line holding birds (or with no bird count on file) are recorded for that station. A mortality check with nothing found is recorded as 0; a blank is not a check. A day is complete when both rounds are done and the water meter reading is recorded. The morning round is not expected on the day birds are placed, nor the afternoon round once a line has been emptied. "Mort" is the dead and culls found on that round. "Time" is the time of the check as written by the person; a time in red does not fit its round (a morning check timed in the afternoon, or the reverse). "Recorded" is when the checklist was typed into the Barn Log, kept automatically. Days a station held no birds are not counted, though anything entered on them is still shown.' }));
   all.forEach(function (x) {
     var st = x[0], r = x[1];
     var rows = r.days.map(function (d) {
-      var a = d.am, p = d.pm, raw = db.get('chk', st.id, d.date) || {};
-      return [niceDate(d.date), a ? a.tm : '', a ? a.by : '', a && a.temp !== null ? fmt(a.temp, 1) : '', E.isNum(raw.a_tn) ? fmt(raw.a_tn, 1) : '', E.isNum(raw.a_fl) ? FLY[raw.a_fl] : '', recordedCell(a, d.date),
-        p ? p.tm : '', p ? p.by : '', p && p.temp !== null ? fmt(p.temp, 1) : '', E.isNum(raw.p_tx) ? fmt(raw.p_tx, 1) : '', E.isNum(raw.p_fl) ? FLY[raw.p_fl] : '', recordedCell(p, d.date),
-        { v: ROUND_STATUS[d.status], flag: d.status !== 'both' && d.status !== 'empty' }];
+      var a = d.am, p = d.pm, raw = db.get('chk', st.id, d.date) || {}, e = d.status === 'empty';
+      return [niceDate(d.date), timeCell('a', a), a ? a.by : '', a && a.temp !== null ? fmt(a.temp, 1) : '', E.isNum(raw.a_tn) ? fmt(raw.a_tn, 1) : '', E.isNum(raw.a_fl) ? FLY[raw.a_fl] : '', e ? '' : mortCell(d.mortA), recordedCell(a, d.date),
+        timeCell('p', p), p ? p.by : '', p && p.temp !== null ? fmt(p.temp, 1) : '', E.isNum(raw.p_tx) ? fmt(raw.p_tx, 1) : '', E.isNum(raw.p_fl) ? FLY[raw.p_fl] : '', e ? '' : mortCell(d.mortP), recordedCell(p, d.date),
+        e ? '' : d.water !== null ? fmt(d.water) : { v: 'no', flag: true },
+        { v: roundStatus(d), wrap: true, flag: d.status !== 'both' && d.status !== 'empty' }];
     });
-    rows.push({ tot: true, c: ['Month', '', r.am + ' of ' + r.expected, '', '', '', '', '', r.pm + ' of ' + r.expected, '', '', '', '', r.both + ' of ' + r.expected + ' days with both rounds'] });
-    sect(box, st.name + ' (' + st.sub + '): morning and afternoon rounds', ['Date', 'AM time', 'AM by', '#AM temp C', '#Min C', 'AM flies', 'AM recorded', 'PM time', 'PM by', '#PM temp C', '#Max C', 'PM flies', 'PM recorded', 'Status'], rows, true);
+    rows.push({ tot: true, c: ['Month', '', r.am + ' of ' + r.expected, '', '', '', '', '', '', r.pm + ' of ' + r.expected, '', '', '', '', '', r.water + ' of ' + r.expected, r.both + ' of ' + r.expected + ' complete days'] });
+    sect(box, st.name + ' (' + st.sub + '): morning and afternoon rounds', ['Date', 'AM time', 'AM by', '#AM temp C', '#Min C', 'AM flies', '#AM mort', 'AM recorded', 'PM time', 'PM by', '#PM temp C', '#Max C', 'PM flies', '#PM mort', 'PM recorded', '#Water meter', 'Status'], rows, true);
   });
 }
 function viewReports(main) {
